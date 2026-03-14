@@ -42,7 +42,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      "@rnmapbox/maps"
+      [
+    "@rnmapbox/maps",
+    {
+      "RNMapboxMapsImpl": "mapbox",
+      "RNMapboxMapsDownloadToken": "secretkey"
+    }
+  ]
     ],
     "extra": {
       "projectName": "AlgorithmAvengers",

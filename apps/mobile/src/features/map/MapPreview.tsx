@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { Text, View, Pressable } from "react-native";
+import { Link } from "expo-router";
 
 import Mapbox from "@rnmapbox/maps";
 
@@ -10,6 +11,11 @@ Mapbox.setAccessToken(env.mapboxAccessToken ?? "");
 const DEFAULT_VIEW_STATE = {
   centerCoordinate: [-1.89357, 52.48306] as [number, number],
   zoomLevel: 12
+};
+
+const CITY_BOUNDS = {
+  ne: [-1.7088, 52.5310] as [number, number], 
+  sw: [-2.0336, 52.3810] as [number, number]  
 };
 
 export function MapPreview() {
@@ -35,6 +41,7 @@ export function MapPreview() {
               <Mapbox.Camera
                 centerCoordinate={DEFAULT_VIEW_STATE.centerCoordinate}
                 zoomLevel={DEFAULT_VIEW_STATE.zoomLevel}
+                maxBounds={CITY_BOUNDS}
               />
             </Mapbox.MapView>
           ) : (
