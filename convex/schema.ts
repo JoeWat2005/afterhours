@@ -7,6 +7,10 @@ export default defineSchema({
     status: v.string()
   }).index("by_created_at", ["createdAt"]),
   safetyReports: defineTable({
+    userId: v.string(),
+    location: v.string(),
+    description: v.optional(v.string()),
+    category: v.string(),
     createdAt: v.number(),
     status: v.string()
   }).index("by_created_at", ["createdAt"])
