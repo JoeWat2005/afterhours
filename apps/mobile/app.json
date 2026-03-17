@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "afterhours",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "experiments": {
       "typedRoutes": true
     },
@@ -42,6 +41,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
+      "@clerk/expo",
       "@rnmapbox/maps"
     ],
     "extra": {

@@ -2,5 +2,6 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/services/api/.venv/bin/python",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/services/api"
-  ]
+  ],
+  "java.configuration.updateBuildConfiguration": "interactive"
 }
