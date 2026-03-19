@@ -3,11 +3,25 @@ import { v } from "convex/values";
 
 export default defineSchema({
   journeys: defineTable({
+    userId: v.string(),
+    start: v.string(),
+    destination: v.string(),
     createdAt: v.number(),
     status: v.string()
   }).index("by_created_at", ["createdAt"]),
+
   safetyReports: defineTable({
+    userId: v.string(),
+    location: v.string(),
+    description: v.optional(v.string()),
+    category: v.string(),
     createdAt: v.number(),
     status: v.string()
-  }).index("by_created_at", ["createdAt"])
+  }).index("by_created_at", ["createdAt"]),
+
+  users: defineTable({
+    name: v.string(),
+    email: v.string(),
+    clerkId: v.string(), 
+  }).index("by_clerk_id", ["clerkId"]),
 });

@@ -13,7 +13,7 @@ dependencies = [
   "arq==0.27.0",
   "httpx==0.28.1",
   "pydantic-settings==2.11.0",
-  "redis==7.0.1",
+  "redis>=4.2,<6",
 ]
 
 [project.optional-dependencies]

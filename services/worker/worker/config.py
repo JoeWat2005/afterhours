@@ -19,6 +19,7 @@ class WorkerSettings(BaseSettings):
         ),
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     environment: str = Field(validation_alias="APP_ENV")

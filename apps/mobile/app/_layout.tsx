@@ -7,7 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProviders } from "../src/providers/AppProviders";
 
 export default function RootLayout() {
-  return (
+  return (  
     <SafeAreaProvider>
       <AppProviders>
         <StatusBar style="light" />
