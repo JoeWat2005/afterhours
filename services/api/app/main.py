@@ -30,3 +30,6 @@ def serve() -> None:
         reload=settings.reload,
         factory=False,
     )
+
+if __name__ == "__main__":
+    serve()
