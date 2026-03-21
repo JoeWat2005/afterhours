@@ -1,6 +1,8 @@
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { useClerk } from "@clerk/clerk-expo";
 
 import { useUiPreferences } from "../src/providers/UIPreferences";
 
@@ -31,6 +33,8 @@ function InfoBlock({
 
 export default function ProfileScreen() {
   const { highContrast } = useUiPreferences();
+  const { signOut } = useClerk();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   return (
     <SafeAreaView className={`flex-1 ${highContrast ? "bg-slate-100" : "bg-slate-950"}`}>
@@ -69,6 +73,30 @@ export default function ProfileScreen() {
             <Text className={`mt-2 text-base ${highContrast ? "text-slate-700" : "text-slate-300"}`}>
               Placeholder profile and saved preferences.
             </Text>
+          </View>
+
+          <View className="mt-6">
+            <Pressable
+              onPress={async () => {
+                try {
+                  setLoggingOut(true);
+                  await signOut();
+                } catch (err) {
+                  console.error("Sign out failed", err);
+                } finally {
+                  setLoggingOut(false);
+                }
+              }}
+              className={`items-center rounded-2xl border px-4 py-4 ${
+                highContrast
+                  ? "border-black/15 bg-red-600"
+                  : "border-red-400/30 bg-red-500"
+              }`}
+            >
+              <Text className={`font-bold text-base ${highContrast ? "text-white" : "text-slate-950"}`}>
+                {loggingOut ? "Signing out..." : "Sign out"}
+              </Text>
+            </Pressable>
           </View>
 
           <View className="mt-4">

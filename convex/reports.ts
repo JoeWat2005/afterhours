@@ -10,8 +10,8 @@ async function getAuth(ctx: any) {
 export const listReports = query({
   args: {},
   handler: async (ctx) => {
-    await getAuth (ctx);
-    return ctx.db.query("safetyReports").order("desc").take(25);
+    await getAuth(ctx);
+    return await ctx.db.query("safetyReports").order("desc").take(25);
   }
 });
 
@@ -41,4 +41,3 @@ export const createReport = mutation({
     });
   }
 });
-
