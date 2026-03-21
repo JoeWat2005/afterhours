@@ -1,0 +1,38 @@
+{
+  "name": "algorithm-avengers",
+  "private": true,
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile:start": "npm run start --workspace @algorithm-avengers/mobile",
+    "mobile:ios": "npm run ios --workspace @algorithm-avengers/mobile",
+    "mobile:android": "npm run android --workspace @algorithm-avengers/mobile",
+    "mobile:web": "npm run web --workspace @algorithm-avengers/mobile",
+    "mobile:typecheck": "npm run typecheck --workspace @algorithm-avengers/mobile",
+    "convex:dev": "npx convex dev",
+    "convex:deploy": "npx convex deploy"
+  },
+  "devDependencies": {
+    "convex": "1.32.0"
+  },
+  "dependencies": {
+    "@clerk/expo": "^3.1.2",
+    "@rnmapbox/maps": "^10.2.10",
+    "expo": "~55.0.6",
+    "expo-auth-session": "~55.0.8",
+    "expo-dev-client": "~55.0.16",
+    "expo-secure-store": "~55.0.8",
+    "expo-web-browser": "~55.0.9",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "overrides": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "version": "1.0.0"
+}

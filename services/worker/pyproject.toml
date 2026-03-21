@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=80.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "afterhours-worker"
+version = "0.1.0"
+description = "Async worker runtime for ingestion, heatmaps, and notifications."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "apscheduler==3.11.2",
+  "arq==0.27.0",
+  "httpx==0.28.1",
+  "pydantic-settings==2.11.0",
+  "redis>=4.2,<6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy==1.19.1",
+  "pytest==8.4.2",
+  "pytest-asyncio==1.2.0",
+  "ruff==0.15.5",
+]
+
+[project.scripts]
+afterhours-worker = "worker.main:run_worker_process"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["worker*"]
