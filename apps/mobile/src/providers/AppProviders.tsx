@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 
-import { ClerkProvider, useAuth } from "@clerk/expo";
+import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 
