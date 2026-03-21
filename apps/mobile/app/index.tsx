@@ -7,6 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MapPreview } from "../src/features/map/MapPreview";
 import { useUiPreferences } from "../src/providers/UIPreferences";
 
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+
 function FilterChip({
   active,
   icon,
@@ -48,6 +51,10 @@ export default function HomeScreen() {
   const [safePlacesEnabled, setSafePlacesEnabled] = useState(true);
   const [transportEnabled, setTransportEnabled] = useState(false);
   const [accessibleEnabled, setAccessibleEnabled] = useState(true);
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  const reports = useQuery(api.reports.listReports, {});
+  const createReport = useMutation(api.reports.createReport);
 
   const panelBg = highContrast ? "bg-white/96" : "bg-slate-950/84";
   const panelBorder = highContrast ? "border-black/20" : "border-cyan-400/15";
@@ -111,15 +118,33 @@ export default function HomeScreen() {
             </Link>
 
             <Pressable
+              onPress={async () => {
+                try {
+                  setSubmittingReport(true);
+                  await createReport({
+                    location: destination.trim() || "City Centre",
+                    description: "Prototype report from mobile client",
+                    category: "lighting",
+                  });
+                } catch (err) {
+                  console.error("Failed to create report", err);
+                } finally {
+                  setSubmittingReport(false);
+                }
+              }}
               className={`min-h-[56px] min-w-[56px] flex-row items-center justify-center rounded-full border px-5 shadow-xl ${
                 highContrast
                   ? "border-black/15 bg-sky-600"
                   : "border-cyan-400/30 bg-cyan-500"
               }`}
             >
-              <Ionicons name="warning-outline" size={20} color={highContrast ? "white" : "#082f49"} />
+              <Ionicons
+                name="warning-outline"
+                size={20}
+                color={highContrast ? "white" : "#082f49"}
+              />
               <Text className={`ml-2 font-bold ${highContrast ? "text-white" : "text-slate-950"}`}>
-                Report
+                {submittingReport ? "Sending..." : "Report"}
               </Text>
             </Pressable>
           </View>
@@ -209,6 +234,49 @@ export default function HomeScreen() {
           <Text className={`mt-3 text-xs ${textSecondary}`}>
             Placeholder search input for route and destination lookup.
           </Text>
+
+          <View className="mt-4">
+            <Text
+              className={`text-[11px] font-bold uppercase tracking-[2.5px] ${
+                highContrast ? "text-sky-700" : "text-cyan-300"
+              }`}
+            >
+              Live reports
+            </Text>
+
+            {!reports ? (
+              <Text className={`mt-2 text-xs ${textSecondary}`}>Loading reports...</Text>
+            ) : reports.length === 0 ? (
+              <Text className={`mt-2 text-xs ${textSecondary}`}>No reports yet.</Text>
+            ) : (
+              <View className="mt-2 gap-2">
+                {reports.slice(0, 3).map((report) => (
+                  <View
+                    key={report._id}
+                    className={`rounded-2xl border px-3 py-3 ${
+                      highContrast
+                        ? "border-black/10 bg-slate-100"
+                        : "border-white/10 bg-slate-900/70"
+                    }`}
+                  >
+                    <Text className={`text-sm font-semibold capitalize ${textPrimary}`}>
+                      {report.category} · {report.location}
+                    </Text>
+
+                    {!!report.description && (
+                      <Text className={`mt-1 text-xs ${textSecondary}`}>
+                        {report.description}
+                      </Text>
+                    )}
+
+                    <Text className={`mt-1 text-[11px] ${textSecondary}`}>
+                      {report.status}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </View>

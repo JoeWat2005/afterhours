@@ -12,7 +12,7 @@ export const listRecentJourneys = query({
   handler: async (ctx) => {
     const identity = await getAuth(ctx);
 
-    return await ctx.db.query("journeys").order("desc").take(10).collect();
+    return await ctx.db.query("journeys").order("desc").take(10);
   }
 });
 
