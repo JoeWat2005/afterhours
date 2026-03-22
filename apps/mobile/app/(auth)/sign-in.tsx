@@ -1,44 +1,64 @@
 import { useState } from "react";
-import { Link, router } from "expo-router";
+import { Link, type Href, useRouter } from "expo-router";
 import { Pressable, SafeAreaView, Text, TextInput, View } from "react-native";
 import { useSignIn } from "@clerk/expo";
 
 export default function SignInScreen() {
-  const { signIn, setActive, isLoaded } = useSignIn();
+  const { signIn, errors, fetchStatus } = useSignIn();
+  const router = useRouter();
+
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const onSignIn = async () => {
-    if (!isLoaded) return;
+    const { error } = await signIn.password({
+      emailAddress,
+      password,
+    });
 
-    try {
-      setSubmitting(true);
-      setErrorMessage(null);
+    if (error) {
+      console.error(JSON.stringify(error, null, 2));
+      return;
+    }
 
-      const result = await signIn.create({
-        identifier: emailAddress,
-        password,
+    if (signIn.status === "complete") {
+      await signIn.finalize({
+        navigate: ({ session, decorateUrl }) => {
+          if (session?.currentTask) {
+            console.log(session.currentTask);
+            return;
+          }
+
+          const url = decorateUrl("/");
+          if (url.startsWith("http")) {
+            window.location.href = url;
+          } else {
+            router.push(url as Href);
+          }
+        },
       });
-
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        router.replace("/");
-      } else {
-        setErrorMessage("Sign-in is not complete yet.");
-      }
-    } catch (err: any) {
-      setErrorMessage(err?.errors?.[0]?.message ?? "Unknown sign-in error");
-    } finally {
-      setSubmitting(false);
+    } else if (signIn.status === "needs_second_factor") {
+      console.log("Second factor required");
+    } else if (signIn.status === "needs_client_trust") {
+      console.log("Client trust step required");
+    } else {
+      console.log("Unhandled sign-in status:", signIn.status);
     }
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#07111F" }}>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        padding: 24,
+        backgroundColor: "#07111F",
+      }}
+    >
       <View style={{ gap: 12 }}>
-        <Text style={{ fontSize: 28, fontWeight: "700", color: "white" }}>Sign in</Text>
+        <Text style={{ fontSize: 28, fontWeight: "700", color: "white" }}>
+          Sign in
+        </Text>
         <Text style={{ color: "#cbd5e1", marginBottom: 8 }}>
           Use your account to continue.
         </Text>
@@ -60,6 +80,12 @@ export default function SignInScreen() {
           }}
         />
 
+        {!!errors?.fields?.identifier && (
+          <Text style={{ color: "#fca5a5" }}>
+            {errors.fields.identifier.message}
+          </Text>
+        )}
+
         <TextInput
           secureTextEntry
           placeholder="Password"
@@ -76,25 +102,36 @@ export default function SignInScreen() {
           }}
         />
 
-        {errorMessage ? (
-          <Text style={{ color: "#fca5a5" }}>{errorMessage}</Text>
-        ) : null}
+        {!!errors?.fields?.password && (
+          <Text style={{ color: "#fca5a5" }}>
+            {errors.fields.password.message}
+          </Text>
+        )}
 
         <Pressable
           onPress={onSignIn}
-          disabled={submitting || !emailAddress || !password}
+          disabled={!emailAddress || !password || fetchStatus === "fetching"}
           style={{
             borderRadius: 12,
             padding: 14,
-            backgroundColor: submitting || !emailAddress || !password ? "#155e75" : "#06b6d4",
+            backgroundColor:
+              !emailAddress || !password || fetchStatus === "fetching"
+                ? "#155e75"
+                : "#06b6d4",
             alignItems: "center",
             marginTop: 8,
           }}
         >
           <Text style={{ fontWeight: "700", color: "#082f49" }}>
-            {submitting ? "Signing in..." : "Sign in"}
+            {fetchStatus === "fetching" ? "Signing in..." : "Sign in"}
           </Text>
         </Pressable>
+
+        {!!errors && (
+          <Text style={{ color: "#94a3b8", fontSize: 12 }}>
+            {JSON.stringify(errors, null, 2)}
+          </Text>
+        )}
 
         <View style={{ flexDirection: "row", marginTop: 8 }}>
           <Text style={{ color: "#cbd5e1" }}>No account yet? </Text>

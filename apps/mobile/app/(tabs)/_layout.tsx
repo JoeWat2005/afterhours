@@ -37,14 +37,18 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Map",
-          tabBarIcon: ({ color }) => <Ionicons name="map-outline" size={26} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="map-outline" size={26} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="report"
         options={{
           title: "Report",
-          tabBarIcon: ({ color }) => <Ionicons name="warning-outline" size={26} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="warning-outline" size={26} color={color} />
+          ),
         }}
       />
     </Tabs>
