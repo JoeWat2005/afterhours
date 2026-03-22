@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@clerk/expo";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
@@ -188,10 +188,7 @@ export default function HomeScreen() {
                 color={highContrast ? "#0f172a" : "#cbd5e1"}
               />
             </View>
-            <View 
-              className="absolute left-4 right-4" 
-              style={{ bottom: insets.bottom + 90 }} 
-            ></View>
+
             <TextInput
               value={destination}
               onChangeText={setDestination}

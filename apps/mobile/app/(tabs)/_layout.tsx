@@ -1,14 +1,24 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text } from "react-native";
+import { useAuth } from "@clerk/expo";
 
 export default function TabLayout() {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    return <Redirect href="/sign-in" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#0891b2", 
-        tabBarInactiveTintColor: "#64748b", 
+        tabBarActiveTintColor: "#0891b2",
+        tabBarInactiveTintColor: "#64748b",
         tabBarStyle: {
           height: 85,
           backgroundColor: "#f8fafc",
@@ -31,31 +41,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="route"
-        options={{
-          title: "Route",
-          tabBarIcon: ({ color }) => <Ionicons name="git-network-outline" size={26} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="report"
         options={{
           title: "Report",
           tabBarIcon: ({ color }) => <Ionicons name="warning-outline" size={26} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="reports_list"
-        options={{
-          title: "Reports",
-          tabBarIcon: ({ color }) => <Ionicons name="document-text-outline" size={26} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="services"
-        options={{
-          title: "Services",
-          tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={26} color={color} />,
         }}
       />
     </Tabs>
