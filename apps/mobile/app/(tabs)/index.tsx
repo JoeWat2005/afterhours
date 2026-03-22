@@ -3,12 +3,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@clerk/clerk-expo";
-import { useMutation, useQuery } from "convex/react";
 
 import { MapPreview } from "../src/features/map/MapPreview";
 import { useUiPreferences } from "../src/providers/UIPreferences";
-import { api } from "../convex/_generated/api";
 
 function FilterChip({
   active,
@@ -173,7 +170,7 @@ export default function HomeScreen() {
 
       <View
         className="absolute left-4 right-4 z-20"
-        style={{ bottom: Math.max(insets.bottom, 16) + 14 }}
+        style={{ bottom: Math.max(insets.bottom, 16) + 85 }}
       >
         <View className={`rounded-[28px] border px-4 py-4 shadow-2xl ${panelBg} ${panelBorder}`}>
           <View className="flex-row items-center">
@@ -188,7 +185,10 @@ export default function HomeScreen() {
                 color={highContrast ? "#0f172a" : "#cbd5e1"}
               />
             </View>
-
+            <View 
+              className="absolute left-4 right-4" 
+              style={{ bottom: insets.bottom + 90 }} 
+            ></View>
             <TextInput
               value={destination}
               onChangeText={setDestination}
