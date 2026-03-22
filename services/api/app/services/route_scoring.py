@@ -1,79 +1,76 @@
-from app.core.route_scoring_config import (
-    ACCESSIBLE_ROUTE_MIN,
-    BASE_COMPONENT_WEIGHTS,
-    COMPONENT_GOOD_THRESHOLD,
-    COMPONENT_INPUT_CAP,
-    COMPONENT_PRECISION,
-    DEFAULT_COMPONENT_SCORE,
-    OUTPUT_PRECISION,
-    OUTPUT_SCALE,
-    PREFERENCE_WEIGHT_BOOSTS,
-)
+from app.core import route_scoring_config as scoring_config
 from app.schemas.routes import (
     RankedRouteResult,
     RouteCandidateInput,
+    RouteBiasMode,
     RouteComponentScores,
     RouteExplanation,
     RoutePreferences,
     RouteScoreRequest,
     RouteScoreResponse,
 )
+from app.services.route_ranker import rank_routes
+from app.services.route_requirements import get_unmet_requirements
+
 
 def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
-    weights = _get_weights(payload.preferences)
+    weights = _get_weights(payload.bias_mode, payload.preferences)
+    requirements_applied = payload.requirements.enabled
     distance_values = [candidate.distance_metres for candidate in payload.route_candidates]
     duration_values = [candidate.duration_seconds for candidate in payload.route_candidates]
     place_values = [
-        candidate.features.open_safe_places_count
+        candidate.features.waiting_areas.safe_waiting_area_count
         for candidate in payload.route_candidates
-        if candidate.features.open_safe_places_count is not None
+        if candidate.features.waiting_areas.safe_waiting_area_count is not None
     ]
 
-    ranked_routes: list[RankedRouteResult] = [
-        _score_candidate(
+    scored_routes: list[RankedRouteResult] = []
+    for candidate in payload.route_candidates:
+        route = _score_candidate(
             candidate,
-            preferences=payload.preferences,
             weights=weights,
             distance_values=distance_values,
             duration_values=duration_values,
             place_values=place_values,
         )
-        for candidate in payload.route_candidates
-    ]
-
-    # If scores match, prefer the option with fewer gaps, then the quicker one.
-    ranked_routes.sort(
-        key=lambda route: (
-            -route.score,
-            len(route.explanation.warnings),
-            route.duration_seconds,
-            route.distance_metres,
-            route.candidate_id,
+        unmet_requirements = (
+            get_unmet_requirements(candidate, payload.requirements)
+            if requirements_applied
+            else []
         )
+        route.meets_requirements = not unmet_requirements
+        route.unmet_requirements = unmet_requirements
+        scored_routes.append(route)
+
+    ranked_routes, requirement_matches_found = rank_routes(
+        scored_routes,
+        requirements_applied=requirements_applied,
     )
 
     for index, route in enumerate(ranked_routes, start=1):
         route.rank = index
 
-    response_warnings = sorted(
-        {
-            warning
-            for route in ranked_routes
-            for warning in route.explanation.warnings
-        }
-    )
+    response_warnings = {
+        warning
+        for route in ranked_routes
+        for warning in route.explanation.warnings
+    }
+    if requirements_applied and not requirement_matches_found:
+        response_warnings.add("no_routes_met_requirements")
 
     return RouteScoreResponse(
         selected_route_id=ranked_routes[0].candidate_id,
+        requirements_applied=requirements_applied,
+        requirement_matches_found=requirement_matches_found,
+        selected_route_is_fallback=ranked_routes[0].is_fallback,
         ranked_routes=ranked_routes,
-        warnings=response_warnings,
+        warnings=sorted(response_warnings),
     )
 
 
 def _score_candidate(
     candidate: RouteCandidateInput,
     *,
-    preferences: RoutePreferences,
     weights: dict[str, float],
     distance_values: list[int],
     duration_values: list[int],
@@ -83,47 +80,55 @@ def _score_candidate(
     warnings: list[str] = []
 
     safety_inputs: list[float] = []
-    if features.incident_density is not None:
-        safety_inputs.append(min(features.incident_density, COMPONENT_INPUT_CAP))
-    if features.report_density is not None:
-        safety_inputs.append(min(features.report_density, COMPONENT_INPUT_CAP))
+    if features.safety.incident_density is not None:
+        safety_inputs.append(
+            min(
+                features.safety.incident_density,
+                _scoring_number("component_input_cap"),
+            )
+        )
+    if features.safety.report_density is not None:
+        safety_inputs.append(
+            min(
+                features.safety.report_density,
+                _scoring_number("component_input_cap"),
+            )
+        )
     if safety_inputs:
         safety = round(
             1 - (sum(safety_inputs) / len(safety_inputs)),
-            COMPONENT_PRECISION,
+            _scoring_precision("component_precision"),
         )
     else:
-        safety = DEFAULT_COMPONENT_SCORE
+        safety = _scoring_number("default_component_score")
         warnings.append("missing_safety_data")
 
     lighting = _read_score(
-        features.lighting_score,
+        features.safety.lighting_score,
         missing_warning="missing_lighting_data",
         warnings=warnings,
     )
     transport = _read_score(
-        features.night_transport_score,
+        features.transport.night_transport_score,
         missing_warning="missing_transport_data",
         warnings=warnings,
     )
 
-    if features.step_free_ratio is None:
-        accessibility = DEFAULT_COMPONENT_SCORE
+    if features.accessibility.step_free_ratio is None:
+        accessibility = _scoring_number("default_component_score")
         warnings.append("missing_accessibility_data")
     else:
         accessibility = round(
-            features.step_free_ratio,
-            COMPONENT_PRECISION,
+            features.accessibility.step_free_ratio,
+            _scoring_precision("component_precision"),
         )
-        if preferences.accessible_routes and accessibility < ACCESSIBLE_ROUTE_MIN:
-            warnings.append("not_fully_accessible")
 
-    if features.open_safe_places_count is None:
-        places = DEFAULT_COMPONENT_SCORE
+    if features.waiting_areas.safe_waiting_area_count is None:
+        places = _scoring_number("default_component_score")
         warnings.append("missing_safe_place_data")
     else:
         places = _relative_score(
-            features.open_safe_places_count,
+            features.waiting_areas.safe_waiting_area_count,
             place_values,
         )
 
@@ -137,7 +142,7 @@ def _score_candidate(
     )
     efficiency = round(
         (distance_score + duration_score) / 2,
-        COMPONENT_PRECISION,
+        _scoring_precision("component_precision"),
     )
 
     total_score = (
@@ -164,9 +169,12 @@ def _score_candidate(
         label=candidate.label,
         provider=candidate.provider,
         rank=1,
+        meets_requirements=True,
+        unmet_requirements=[],
+        is_fallback=False,
         score=round(
-            total_score * OUTPUT_SCALE,
-            OUTPUT_PRECISION,
+            total_score * _scoring_number("output_scale"),
+            _scoring_precision("output_precision"),
         ),
         distance_metres=candidate.distance_metres,
         duration_seconds=candidate.duration_seconds,
@@ -180,22 +188,6 @@ def _score_candidate(
     )
 
 
-def _get_weights(preferences: RoutePreferences) -> dict[str, float]:
-    weights = dict(BASE_COMPONENT_WEIGHTS)
-
-    # These are small nudges rather than massive overrides.
-    if preferences.accessible_routes:
-        weights["accessibility"] += PREFERENCE_WEIGHT_BOOSTS["accessibility"]
-    if preferences.nearby_safe_places:
-        weights["places"] += PREFERENCE_WEIGHT_BOOSTS["places"]
-
-    total = sum(weights.values())
-    for key in weights:
-        weights[key] = weights[key] / total
-
-    return weights
-
-
 def _read_score(
     value: float | None,
     *,
@@ -204,24 +196,24 @@ def _read_score(
 ) -> float:
     if value is None:
         warnings.append(missing_warning)
-        return DEFAULT_COMPONENT_SCORE
-    return round(value, COMPONENT_PRECISION)
+        return _scoring_number("default_component_score")
+    return round(value, _scoring_precision("component_precision"))
 
 
 def _build_reasons(component_scores: RouteComponentScores) -> list[str]:
     reasons: list[str] = []
 
-    if component_scores.safety >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.safety >= _scoring_number("component_good_threshold"):
         reasons.append("lower safety risk")
-    if component_scores.lighting >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.lighting >= _scoring_number("component_good_threshold"):
         reasons.append("better lighting")
-    if component_scores.accessibility >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.accessibility >= _scoring_number("component_good_threshold"):
         reasons.append("better step-free access")
-    if component_scores.transport >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.transport >= _scoring_number("component_good_threshold"):
         reasons.append("better late transport support")
-    if component_scores.places >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.places >= _scoring_number("component_good_threshold"):
         reasons.append("more nearby safe places")
-    if component_scores.efficiency >= COMPONENT_GOOD_THRESHOLD:
+    if component_scores.efficiency >= _scoring_number("component_good_threshold"):
         reasons.append("shorter trip")
 
     if not reasons:
@@ -236,31 +228,71 @@ def _build_summary(route_name: str, warnings: list[str]) -> str:
     return f"{route_name} looks strong from the data provided."
 
 
+def _get_weights(
+    bias_mode: RouteBiasMode,
+    preferences: RoutePreferences,
+) -> dict[str, float]:
+    weights = dict(scoring_config.BIAS_MODE_WEIGHT_PROFILES[bias_mode])
+
+    if preferences.accessibility.enabled:
+        _apply_weight_boosts(
+            weights,
+            scoring_config.SOFT_PREFERENCE_BOOSTS["accessibility"],
+        )
+    if preferences.waiting_areas.enabled:
+        _apply_weight_boosts(
+            weights,
+            scoring_config.SOFT_PREFERENCE_BOOSTS["waiting_areas"],
+        )
+
+    total = sum(weights.values())
+    for key in weights:
+        weights[key] = weights[key] / total
+
+    return weights
+
+
+def _apply_weight_boosts(
+    weights: dict[str, float],
+    boosts: dict[str, float],
+) -> None:
+    for component, boost in boosts.items():
+        weights[component] += boost
+
+
+def _scoring_number(key: str) -> float:
+    return float(scoring_config.ROUTE_SCORING_DEFAULTS[key])
+
+
+def _scoring_precision(key: str) -> int:
+    return int(scoring_config.ROUTE_SCORING_DEFAULTS[key])
+
+
 def _relative_score(value: int, values: list[int]) -> float:
     if not values:
-        return DEFAULT_COMPONENT_SCORE
+        return _scoring_number("default_component_score")
 
     minimum = min(values)
     maximum = max(values)
     if minimum == maximum:
-        return DEFAULT_COMPONENT_SCORE
+        return _scoring_number("default_component_score")
 
     return round(
         (value - minimum) / (maximum - minimum),
-        COMPONENT_PRECISION,
+        _scoring_precision("component_precision"),
     )
 
 
 def _relative_inverse_score(value: int, values: list[int]) -> float:
     if not values:
-        return DEFAULT_COMPONENT_SCORE
+        return _scoring_number("default_component_score")
 
     minimum = min(values)
     maximum = max(values)
     if minimum == maximum:
-        return DEFAULT_COMPONENT_SCORE
+        return _scoring_number("default_component_score")
 
     return round(
         1 - ((value - minimum) / (maximum - minimum)),
-        COMPONENT_PRECISION,
+        _scoring_precision("component_precision"),
     )

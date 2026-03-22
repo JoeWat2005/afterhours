@@ -74,6 +74,10 @@ class RouteRequirements(BaseModel):
         default_factory=RouteWaitingAreaChoices
     )
 
+    @property
+    def enabled(self) -> bool:
+        return self.accessibility.enabled or self.waiting_areas.enabled
+
 
 class RoutePreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -84,14 +88,6 @@ class RoutePreferences(BaseModel):
     waiting_areas: RouteWaitingAreaChoices = Field(
         default_factory=RouteWaitingAreaChoices
     )
-
-    @property
-    def accessible_routes(self) -> bool:
-        return self.accessibility.enabled
-
-    @property
-    def nearby_safe_places(self) -> bool:
-        return self.waiting_areas.enabled
 
 
 class RouteSafetyFeatures(BaseModel):
@@ -148,31 +144,6 @@ class RouteCandidateFeatures(BaseModel):
         default_factory=RouteWaitingAreaFeatures
     )
 
-    # These keep the current scorer working until the ranking logic is rewritten.
-    @property
-    def incident_density(self) -> float | None:
-        return self.safety.incident_density
-
-    @property
-    def lighting_score(self) -> float | None:
-        return self.safety.lighting_score
-
-    @property
-    def report_density(self) -> float | None:
-        return self.safety.report_density
-
-    @property
-    def step_free_ratio(self) -> float | None:
-        return self.accessibility.step_free_ratio
-
-    @property
-    def night_transport_score(self) -> float | None:
-        return self.transport.night_transport_score
-
-    @property
-    def open_safe_places_count(self) -> int | None:
-        return self.waiting_areas.safe_waiting_area_count
-
 
 class RouteCandidateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -212,6 +183,9 @@ class RankedRouteResult(BaseModel):
     label: str | None = None
     provider: str | None = None
     rank: int = Field(gt=0)
+    meets_requirements: bool = True
+    unmet_requirements: list[str] = Field(default_factory=list)
+    is_fallback: bool = False
     score: float = Field(ge=0, le=100)
     distance_metres: int = Field(gt=0)
     duration_seconds: int = Field(gt=0)
@@ -250,6 +224,9 @@ class RouteScoreResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     selected_route_id: str
+    requirements_applied: bool = False
+    requirement_matches_found: bool = True
+    selected_route_is_fallback: bool = False
     ranked_routes: list[RankedRouteResult] = Field(min_length=1)
     warnings: list[str] = Field(default_factory=list)
 
