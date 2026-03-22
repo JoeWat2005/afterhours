@@ -106,9 +106,14 @@ def test_route_score_endpoint_returns_ranked_route_response() -> None:
 
     body = response.json()
     assert body["selected_route_id"] == "route-b"
+    assert body["requirements_applied"] is True
+    assert body["requirement_matches_found"] is True
+    assert body["selected_route_is_fallback"] is False
     assert len(body["ranked_routes"]) == 2
     assert body["ranked_routes"][0]["rank"] == 1
     assert body["ranked_routes"][0]["candidate_id"] == "route-b"
+    assert body["ranked_routes"][0]["meets_requirements"] is True
+    assert body["ranked_routes"][0]["is_fallback"] is False
     assert body["ranked_routes"][0]["component_scores"]["lighting"] == 0.84
     assert "better lighting" in body["ranked_routes"][0]["explanation"]["reasons"]
 

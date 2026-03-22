@@ -194,6 +194,9 @@ def test_missing_route_data_creates_route_warnings() -> None:
         "missing_safety_data",
         "missing_transport_data",
     ]
+    assert result.requirements_applied is False
+    assert result.requirement_matches_found is True
+    assert result.selected_route_is_fallback is False
     assert result.ranked_routes[0].explanation.warnings == result.warnings
 
 
@@ -208,6 +211,92 @@ def test_better_lighting_can_change_ranking() -> None:
     result = score_route_request(request)
 
     assert result.selected_route_id == "brighter-route"
+
+
+def test_bias_mode_can_change_selected_route() -> None:
+    maximum_safety_request = make_request(
+        [
+            make_candidate(
+                "safe-main-road",
+                distance_metres=1400,
+                duration_seconds=1100,
+                incident_density=0.05,
+                lighting_score=0.90,
+                report_density=0.05,
+            ),
+            make_candidate(
+                "fast-cut-through",
+                distance_metres=700,
+                duration_seconds=520,
+                incident_density=0.45,
+                lighting_score=0.30,
+                report_density=0.40,
+            ),
+        ],
+        bias_mode="maximum_safety",
+    )
+    most_efficiency_request = make_request(
+        maximum_safety_request.model_dump()["route_candidates"],
+        bias_mode="most_efficiency",
+    )
+
+    maximum_safety_result = score_route_request(maximum_safety_request)
+    most_efficiency_result = score_route_request(most_efficiency_request)
+
+    assert maximum_safety_result.selected_route_id == "safe-main-road"
+    assert most_efficiency_result.selected_route_id == "fast-cut-through"
+
+
+def test_requirement_matching_routes_rank_ahead_of_fallback_routes() -> None:
+    request = make_request(
+        [
+            make_candidate(
+                "stairs-shortcut",
+                distance_metres=800,
+                duration_seconds=650,
+                step_free_ratio=0.20,
+            ),
+            make_candidate(
+                "step-free-route",
+                distance_metres=1100,
+                duration_seconds=900,
+                step_free_ratio=1.00,
+            ),
+        ],
+        accessibility_requirement=True,
+    )
+
+    result = score_route_request(request)
+
+    assert result.requirements_applied is True
+    assert result.requirement_matches_found is True
+    assert result.selected_route_id == "step-free-route"
+    assert result.selected_route_is_fallback is False
+    assert result.ranked_routes[0].meets_requirements is True
+    assert result.ranked_routes[0].is_fallback is False
+    assert result.ranked_routes[1].meets_requirements is False
+    assert result.ranked_routes[1].is_fallback is True
+    assert result.ranked_routes[1].unmet_requirements == ["step_free_access"]
+
+
+def test_fallback_routes_are_returned_when_no_route_meets_requirements() -> None:
+    request = make_request(
+        [
+            make_candidate("route-a", step_free_ratio=0.20),
+            make_candidate("route-b", step_free_ratio=0.40),
+        ],
+        accessibility_requirement=True,
+    )
+
+    result = score_route_request(request)
+
+    assert result.requirements_applied is True
+    assert result.requirement_matches_found is False
+    assert result.selected_route_is_fallback is True
+    assert "no_routes_met_requirements" in result.warnings
+    assert result.ranked_routes[0].is_fallback is True
+    assert result.ranked_routes[0].meets_requirements is False
+    assert "step_free_access" in result.ranked_routes[0].unmet_requirements
 
 
 def test_safe_place_preference_can_change_ranking() -> None:
