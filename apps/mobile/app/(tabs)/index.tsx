@@ -3,9 +3,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "@clerk/clerk-expo";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
-import { MapPreview } from "../src/features/map/MapPreview";
-import { useUiPreferences } from "../src/providers/UIPreferences";
+import { MapPreview } from "../../src/features/map/MapPreview";
+import { useUiPreferences } from "../../src/providers/UIPreferences";
 
 function FilterChip({
   active,
