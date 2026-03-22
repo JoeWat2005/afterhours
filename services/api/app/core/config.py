@@ -43,38 +43,6 @@ class Settings(BaseSettings):
         validation_alias="CONVEX_DEPLOYMENT_URL",
     )
 
-    route_score_weight_safety: float = Field(
-        default=0.30,
-        ge=0,
-        validation_alias="ROUTE_SCORE_WEIGHT_SAFETY",
-    )
-    route_score_weight_lighting: float = Field(
-        default=0.20,
-        ge=0,
-        validation_alias="ROUTE_SCORE_WEIGHT_LIGHTING",
-    )
-    route_score_weight_accessibility: float = Field(
-        default=0.20,
-        ge=0,
-        validation_alias="ROUTE_SCORE_WEIGHT_ACCESSIBILITY",
-    )
-    route_score_weight_transport: float = Field(
-        default=0.10,
-        ge=0,
-        validation_alias="ROUTE_SCORE_WEIGHT_TRANSPORT",
-    )
-    route_score_weight_efficiency: float = Field(
-        default=0.10,
-        ge=0,
-        validation_alias=AliasChoices("ROUTE_SCORE_WEIGHT_EFFICIENCY", "ROUTE_SCORE_WEIGHT_SPEED"),
-    )
-    route_score_weight_amenity: float = Field(
-        default=0.10,
-        ge=0,
-        validation_alias="ROUTE_SCORE_WEIGHT_AMENITY",
-    )
-
-
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
