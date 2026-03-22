@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -11,23 +12,166 @@ class RouteLocation(LonLat):
     label: str | None = Field(default=None, min_length=1, max_length=128)
 
 
+class RouteBiasMode(str, Enum):
+    MAXIMUM_SAFETY = "maximum_safety"
+    BALANCED = "balanced"
+    MOST_EFFICIENCY = "most_efficiency"
+
+
+class RouteAccessibilityChoices(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    avoid_stairs: bool = False
+    step_free_access: bool = False
+    lifts_available: bool = False
+    ramps_available: bool = False
+    escalators_available: bool = False
+
+    @property
+    def enabled(self) -> bool:
+        return any(
+            (
+                self.avoid_stairs,
+                self.step_free_access,
+                self.lifts_available,
+                self.ramps_available,
+                self.escalators_available,
+            )
+        )
+
+
+class RouteWaitingAreaChoices(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    safe_waiting_areas: bool = False
+    well_lit_waiting_areas: bool = False
+    wifi_nearby: bool = False
+    staffed_venues_nearby: bool = False
+    open_venues_nearby: bool = False
+    safe_areas_nearby: bool = False
+
+    @property
+    def enabled(self) -> bool:
+        return any(
+            (
+                self.safe_waiting_areas,
+                self.well_lit_waiting_areas,
+                self.wifi_nearby,
+                self.staffed_venues_nearby,
+                self.open_venues_nearby,
+                self.safe_areas_nearby,
+            )
+        )
+
+
+class RouteRequirements(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    accessibility: RouteAccessibilityChoices = Field(
+        default_factory=RouteAccessibilityChoices
+    )
+    waiting_areas: RouteWaitingAreaChoices = Field(
+        default_factory=RouteWaitingAreaChoices
+    )
+
+
 class RoutePreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    accessible_routes: bool = False
-    transport_tonight: bool = False
-    nearby_safe_places: bool = False
+    accessibility: RouteAccessibilityChoices = Field(
+        default_factory=RouteAccessibilityChoices
+    )
+    waiting_areas: RouteWaitingAreaChoices = Field(
+        default_factory=RouteWaitingAreaChoices
+    )
+
+    @property
+    def accessible_routes(self) -> bool:
+        return self.accessibility.enabled
+
+    @property
+    def nearby_safe_places(self) -> bool:
+        return self.waiting_areas.enabled
+
+
+class RouteSafetyFeatures(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    incident_density: float | None = Field(default=None, ge=0)
+    lighting_score: float | None = Field(default=None, ge=0, le=1)
+    report_density: float | None = Field(default=None, ge=0)
+
+
+class RouteAccessibilityFeatures(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_free_ratio: float | None = Field(default=None, ge=0, le=1)
+    stairs_present: bool | None = None
+    lift_coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+    ramp_coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+    escalator_coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+
+
+class RouteTransportFeatures(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    night_transport_score: float | None = Field(default=None, ge=0, le=1)
+    transfer_count: int | None = Field(default=None, ge=0)
+    late_service_available: bool | None = None
+
+
+class RouteWaitingAreaFeatures(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    safe_waiting_area_count: int | None = Field(default=None, ge=0)
+    well_lit_waiting_area_count: int | None = Field(default=None, ge=0)
+    wifi_access_point_count: int | None = Field(default=None, ge=0)
+    staffed_venue_count: int | None = Field(default=None, ge=0)
+    open_venue_count: int | None = Field(default=None, ge=0)
+    waiting_areas_in_safe_areas_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
+    max_gap_between_safe_waiting_areas_metres: int | None = Field(default=None, ge=0)
 
 
 class RouteCandidateFeatures(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    incident_density: float | None = Field(default=None, ge=0)
-    lighting_score: float | None = Field(default=None, ge=0, le=1)
-    step_free_ratio: float | None = Field(default=None, ge=0, le=1)
-    night_transport_score: float | None = Field(default=None, ge=0, le=1)
-    open_safe_places_count: int | None = Field(default=None, ge=0)
-    report_density: float | None = Field(default=None, ge=0)
+    safety: RouteSafetyFeatures = Field(default_factory=RouteSafetyFeatures)
+    accessibility: RouteAccessibilityFeatures = Field(
+        default_factory=RouteAccessibilityFeatures
+    )
+    transport: RouteTransportFeatures = Field(default_factory=RouteTransportFeatures)
+    waiting_areas: RouteWaitingAreaFeatures = Field(
+        default_factory=RouteWaitingAreaFeatures
+    )
+
+    # These keep the current scorer working until the ranking logic is rewritten.
+    @property
+    def incident_density(self) -> float | None:
+        return self.safety.incident_density
+
+    @property
+    def lighting_score(self) -> float | None:
+        return self.safety.lighting_score
+
+    @property
+    def report_density(self) -> float | None:
+        return self.safety.report_density
+
+    @property
+    def step_free_ratio(self) -> float | None:
+        return self.accessibility.step_free_ratio
+
+    @property
+    def night_transport_score(self) -> float | None:
+        return self.transport.night_transport_score
+
+    @property
+    def open_safe_places_count(self) -> int | None:
+        return self.waiting_areas.safe_waiting_area_count
 
 
 class RouteCandidateInput(BaseModel):
@@ -82,6 +226,8 @@ class RouteScoreRequest(BaseModel):
     origin: RouteLocation
     destination: RouteLocation
     depart_at: datetime
+    bias_mode: RouteBiasMode = RouteBiasMode.BALANCED
+    requirements: RouteRequirements = Field(default_factory=RouteRequirements)
     preferences: RoutePreferences = Field(default_factory=RoutePreferences)
     route_candidates: list[RouteCandidateInput] = Field(min_length=1)
 

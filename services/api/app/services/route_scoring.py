@@ -186,8 +186,6 @@ def _get_weights(preferences: RoutePreferences) -> dict[str, float]:
     # These are small nudges rather than massive overrides.
     if preferences.accessible_routes:
         weights["accessibility"] += PREFERENCE_WEIGHT_BOOSTS["accessibility"]
-    if preferences.transport_tonight:
-        weights["transport"] += PREFERENCE_WEIGHT_BOOSTS["transport"]
     if preferences.nearby_safe_places:
         weights["places"] += PREFERENCE_WEIGHT_BOOSTS["places"]
 

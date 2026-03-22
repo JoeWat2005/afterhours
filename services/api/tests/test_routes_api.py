@@ -21,10 +21,23 @@ def test_route_score_endpoint_returns_ranked_route_response() -> None:
                 "label": "Night Bus Stop",
             },
             "depart_at": "2026-03-22T22:30:00+00:00",
+            "bias_mode": "maximum_safety",
+            "requirements": {
+                "accessibility": {
+                    "avoid_stairs": True,
+                    "step_free_access": True,
+                    "lifts_available": True,
+                }
+            },
             "preferences": {
-                "accessible_routes": True,
-                "transport_tonight": True,
-                "nearby_safe_places": True,
+                "accessibility": {
+                    "step_free_access": True,
+                    "ramps_available": True,
+                },
+                "waiting_areas": {
+                    "safe_waiting_areas": True,
+                    "well_lit_waiting_areas": True,
+                },
             },
             "route_candidates": [
                 {
@@ -34,12 +47,24 @@ def test_route_score_endpoint_returns_ranked_route_response() -> None:
                     "distance_metres": 900,
                     "duration_seconds": 720,
                     "features": {
-                        "incident_density": 0.28,
-                        "lighting_score": 0.35,
-                        "step_free_ratio": 0.40,
-                        "night_transport_score": 0.10,
-                        "open_safe_places_count": 0,
-                        "report_density": 0.24,
+                        "safety": {
+                            "incident_density": 0.28,
+                            "lighting_score": 0.35,
+                            "report_density": 0.24,
+                        },
+                        "accessibility": {
+                            "step_free_ratio": 0.40,
+                            "stairs_present": True,
+                            "lift_coverage_ratio": 0.10,
+                        },
+                        "transport": {
+                            "night_transport_score": 0.10,
+                            "transfer_count": 1,
+                        },
+                        "waiting_areas": {
+                            "safe_waiting_area_count": 0,
+                            "well_lit_waiting_area_count": 0,
+                        },
                     },
                 },
                 {
@@ -49,12 +74,28 @@ def test_route_score_endpoint_returns_ranked_route_response() -> None:
                     "distance_metres": 1150,
                     "duration_seconds": 870,
                     "features": {
-                        "incident_density": 0.16,
-                        "lighting_score": 0.84,
-                        "step_free_ratio": 1.00,
-                        "night_transport_score": 0.75,
-                        "open_safe_places_count": 3,
-                        "report_density": 0.12,
+                        "safety": {
+                            "incident_density": 0.16,
+                            "lighting_score": 0.84,
+                            "report_density": 0.12,
+                        },
+                        "accessibility": {
+                            "step_free_ratio": 1.00,
+                            "stairs_present": False,
+                            "lift_coverage_ratio": 1.00,
+                            "ramp_coverage_ratio": 0.90,
+                        },
+                        "transport": {
+                            "night_transport_score": 0.75,
+                            "transfer_count": 1,
+                            "late_service_available": True,
+                        },
+                        "waiting_areas": {
+                            "safe_waiting_area_count": 3,
+                            "well_lit_waiting_area_count": 2,
+                            "open_venue_count": 2,
+                            "waiting_areas_in_safe_areas_ratio": 0.9,
+                        },
                     },
                 },
             ],
