@@ -17,7 +17,7 @@ const CITY_BOUNDS = {
 };
 
 export function MapPreview() {
-  const mapEnabled = Boolean(env.mapboxAccessToken);
+  const mapEnabled = Boolean(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN);
   const { highContrast } = useUiPreferences();
 
   if (!mapEnabled) {

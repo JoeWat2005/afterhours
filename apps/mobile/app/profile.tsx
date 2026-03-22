@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
-import { useClerk } from "@clerk/clerk-expo";
+import { useClerk } from "@clerk/expo";
 
 import { useUiPreferences } from "../src/providers/UIPreferences";
 

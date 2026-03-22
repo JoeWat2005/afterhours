@@ -38,18 +38,17 @@
       "bundler": "metro"
     },
     "plugins": [
-  "expo-router",
-  "expo-secure-store",
-  "expo-web-browser",
-  "@clerk/expo",
-  [
-    "@rnmapbox/maps",
-    {
-      "RNMapboxMapsImpl": "mapbox",
-      "RNMapboxMapsDownloadToken": "secretkey"
-    }
-  ]
-],
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      "@clerk/expo",
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox"
+        }
+      ]
+    ],
     "extra": {
       "projectName": "AlgorithmAvengers",
       "architecture": "mobile-convex-clerk-mapbox"
