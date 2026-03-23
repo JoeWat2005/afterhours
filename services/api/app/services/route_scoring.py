@@ -16,6 +16,7 @@ from app.services.route_requirements import get_unmet_requirements
 def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
     weights = _get_weights(payload.bias_mode, payload.preferences)
     requirements_applied = payload.requirements.enabled
+
     distance_values = [candidate.distance_metres for candidate in payload.route_candidates]
     duration_values = [candidate.duration_seconds for candidate in payload.route_candidates]
     place_values = [
@@ -23,6 +24,7 @@ def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
         for candidate in payload.route_candidates
         if candidate.features.waiting_areas.safe_waiting_area_count is not None
     ]
+    safety_risk_values = _collect_safety_risk_values(payload.route_candidates)
 
     scored_routes: list[RankedRouteResult] = []
     for candidate in payload.route_candidates:
@@ -32,7 +34,9 @@ def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
             distance_values=distance_values,
             duration_values=duration_values,
             place_values=place_values,
+            safety_risk_values=safety_risk_values,
         )
+
         unmet_requirements = (
             get_unmet_requirements(candidate, payload.requirements)
             if requirements_applied
@@ -75,33 +79,12 @@ def _score_candidate(
     distance_values: list[int],
     duration_values: list[int],
     place_values: list[int],
+    safety_risk_values: list[float],
 ) -> RankedRouteResult:
     features = candidate.features
-    warnings: list[str] = []
+    warnings: list[str] = list(getattr(features.safety, "warnings", []) or [])
 
-    safety_inputs: list[float] = []
-    if features.safety.incident_density is not None:
-        safety_inputs.append(
-            min(
-                features.safety.incident_density,
-                _scoring_number("component_input_cap"),
-            )
-        )
-    if features.safety.report_density is not None:
-        safety_inputs.append(
-            min(
-                features.safety.report_density,
-                _scoring_number("component_input_cap"),
-            )
-        )
-    if safety_inputs:
-        safety = round(
-            1 - (sum(safety_inputs) / len(safety_inputs)),
-            _scoring_precision("component_precision"),
-        )
-    else:
-        safety = _scoring_number("default_component_score")
-        warnings.append("missing_safety_data")
+    safety = _score_safety_component(candidate, safety_risk_values, warnings)
 
     lighting = _read_score(
         features.safety.lighting_score,
@@ -118,31 +101,35 @@ def _score_candidate(
         accessibility = _scoring_number("default_component_score")
         warnings.append("missing_accessibility_data")
     else:
-        accessibility = round(
-            features.accessibility.step_free_ratio,
-            _scoring_precision("component_precision"),
+        accessibility = _clamp_score(
+            round(
+                features.accessibility.step_free_ratio,
+                _scoring_precision("component_precision"),
+            )
         )
 
     if features.waiting_areas.safe_waiting_area_count is None:
         places = _scoring_number("default_component_score")
         warnings.append("missing_safe_place_data")
     else:
-        places = _relative_score(
-            features.waiting_areas.safe_waiting_area_count,
-            place_values,
+        places = _clamp_score(
+            _relative_score(
+                features.waiting_areas.safe_waiting_area_count,
+                place_values,
+            )
         )
 
-    distance_score = _relative_inverse_score(
-        candidate.distance_metres,
-        distance_values,
+    distance_score = _clamp_score(
+        _relative_inverse_score(candidate.distance_metres, distance_values)
     )
-    duration_score = _relative_inverse_score(
-        candidate.duration_seconds,
-        duration_values,
+    duration_score = _clamp_score(
+        _relative_inverse_score(candidate.duration_seconds, duration_values)
     )
-    efficiency = round(
-        (distance_score + duration_score) / 2,
-        _scoring_precision("component_precision"),
+    efficiency = _clamp_score(
+        round(
+            (distance_score + duration_score) / 2,
+            _scoring_precision("component_precision"),
+        )
     )
 
     total_score = (
@@ -173,7 +160,7 @@ def _score_candidate(
         unmet_requirements=[],
         is_fallback=False,
         score=round(
-            total_score * _scoring_number("output_scale"),
+            max(0.0, total_score) * _scoring_number("output_scale"),
             _scoring_precision("output_precision"),
         ),
         distance_metres=candidate.distance_metres,
@@ -188,6 +175,46 @@ def _score_candidate(
     )
 
 
+def _score_safety_component(
+    candidate: RouteCandidateInput,
+    safety_risk_values: list[float],
+    warnings: list[str],
+) -> float:
+    risk_inputs: list[float] = []
+
+    if candidate.features.safety.incident_density is not None:
+        risk_inputs.append(float(candidate.features.safety.incident_density))
+    if candidate.features.safety.report_density is not None:
+        risk_inputs.append(float(candidate.features.safety.report_density))
+
+    if not risk_inputs:
+        warnings.append("missing_safety_data")
+        return _scoring_number("default_component_score")
+
+    raw_risk = sum(risk_inputs) / len(risk_inputs)
+
+    if len(safety_risk_values) <= 1:
+        return _scoring_number("default_component_score")
+
+    return _clamp_score(_relative_inverse_score(raw_risk, safety_risk_values))
+
+
+def _collect_safety_risk_values(candidates: list[RouteCandidateInput]) -> list[float]:
+    values: list[float] = []
+
+    for candidate in candidates:
+        risk_inputs: list[float] = []
+        if candidate.features.safety.incident_density is not None:
+            risk_inputs.append(float(candidate.features.safety.incident_density))
+        if candidate.features.safety.report_density is not None:
+            risk_inputs.append(float(candidate.features.safety.report_density))
+
+        if risk_inputs:
+            values.append(sum(risk_inputs) / len(risk_inputs))
+
+    return values
+
+
 def _read_score(
     value: float | None,
     *,
@@ -197,7 +224,7 @@ def _read_score(
     if value is None:
         warnings.append(missing_warning)
         return _scoring_number("default_component_score")
-    return round(value, _scoring_precision("component_precision"))
+    return _clamp_score(round(value, _scoring_precision("component_precision")))
 
 
 def _build_reasons(component_scores: RouteComponentScores) -> list[str]:
@@ -268,7 +295,7 @@ def _scoring_precision(key: str) -> int:
     return int(scoring_config.ROUTE_SCORING_DEFAULTS[key])
 
 
-def _relative_score(value: int, values: list[int]) -> float:
+def _relative_score(value: float, values: list[float]) -> float:
     if not values:
         return _scoring_number("default_component_score")
 
@@ -283,7 +310,7 @@ def _relative_score(value: int, values: list[int]) -> float:
     )
 
 
-def _relative_inverse_score(value: int, values: list[int]) -> float:
+def _relative_inverse_score(value: float, values: list[float]) -> float:
     if not values:
         return _scoring_number("default_component_score")
 
@@ -296,3 +323,7 @@ def _relative_inverse_score(value: int, values: list[int]) -> float:
         1 - ((value - minimum) / (maximum - minimum)),
         _scoring_precision("component_precision"),
     )
+
+
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(1.0, value))

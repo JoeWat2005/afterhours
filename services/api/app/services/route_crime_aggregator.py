@@ -12,6 +12,7 @@ from app.services.police_api import (
     sample_route_points_by_distance,
 )
 from app.services.police_api_config import (
+    DEFAULT_CATEGORY,
     DEFAULT_MAX_ROUTE_FETCH_POINTS,
     DEFAULT_ROUTE_CORRIDOR_HALF_WIDTH_METRES,
     DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
@@ -46,14 +47,6 @@ def _compute_incident_density(
 def compute_route_safety_metrics(
     payload: RouteCrimeAggregationInput,
 ) -> RouteSafetyMetrics:
-    """
-    Stable middle layer between police_api.py and route_scoring.py.
-
-    Current responsibility:
-    - accept normalized police crime points for a route
-    - compute route-level safety metrics
-    - leave heatmap generation for later
-    """
     geometry = payload["route_geometry_geojson"]
     points = iter_route_points(geometry)
     length_metres = route_length_metres(points)
@@ -89,6 +82,7 @@ async def enrich_route_candidate_safety(
     route_geometry_geojson: dict[str, Any],
     route_id: str | None = None,
     date: str | None = None,
+    category: str = DEFAULT_CATEGORY,
     db: AsyncSession | None = None,
     corridor_half_width_metres: float = DEFAULT_ROUTE_CORRIDOR_HALF_WIDTH_METRES,
     cell_size_metres: float = DEFAULT_RUNTIME_CELL_SIZE_METRES,
@@ -97,17 +91,11 @@ async def enrich_route_candidate_safety(
     max_route_points: int = DEFAULT_MAX_ROUTE_FETCH_POINTS,
     per_point_report_limit: int = 100,
 ) -> RouteSafetyMetrics:
-    """
-    Single entry point callers should use.
-
-    - Always computes police-based incident_density
-    - Computes DB-backed report_density when a DB session is provided
-    - Deliberately does not generate heatmap cells yet
-    """
     route_crime_response = await fetch_route_crime_points(
         route_geometry_geojson=route_geometry_geojson,
         route_id=route_id,
         date=date,
+        category=category,
         sample_spacing_metres=sample_spacing_metres,
         max_route_points=max_route_points,
     )
