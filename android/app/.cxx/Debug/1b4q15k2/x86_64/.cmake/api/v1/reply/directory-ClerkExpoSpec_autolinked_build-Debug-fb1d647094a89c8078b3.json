@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "ClerkExpoSpec_autolinked_build",
+		"source" : "C:/Users/Joseph/Desktop/AlgorithmAvengers/node_modules/@clerk/expo/android/build/generated/source/codegen/jni"
+	}
+}

@@ -1,0 +1,49 @@
+{
+  "buildFiles": [
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@clerk\\expo\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@rnmapbox\\maps\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@solana-mobile\\mobile-wallet-adapter-protocol\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\.cxx\\Debug\\1b4q15k2\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\.cxx\\Debug\\1b4q15k2\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "react_codegen_ClerkExpoSpec::@12191d4ad96d53e65471": {
+      "artifactName": "react_codegen_ClerkExpoSpec",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "react_codegen_SolanaMobileWalletAdapter::@3f2db36c7d2aae804b20": {
+      "artifactName": "react_codegen_SolanaMobileWalletAdapter",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "react_codegen_rnmapbox_maps_specs::@636de9d518b8c337676e": {
+      "artifactName": "react_codegen_rnmapbox_maps_specs",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "artifactName": "appmodules",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\build\\intermediates\\cxx\\Debug\\1b4q15k2\\obj\\arm64-v8a\\libappmodules.so",
+      "runtimeFiles": [
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\a812d4111e89aa72b21e529418fc9d08\\transformed\\react-android-0.83.2-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\a812d4111e89aa72b21e529418fc9d08\\transformed\\react-android-0.83.2-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
+      ]
+    }
+  }
+}
