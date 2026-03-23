@@ -4,13 +4,18 @@ from typing import Any
 
 import httpx
 
-from app.services.police_api import (
+from app.core.route_enrichment_config import (
+    DEFAULT_BBOX_PAD_DEGREES,
+    DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
+    DEFAULT_MAX_ROUTE_FETCH_POINTS,
+    DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
+    OVERPASS_API_URL,
+    OVERPASS_TIMEOUT,
+)
+from app.services.route_geometry import (
     iter_route_points,
     sample_route_points_by_distance,
 )
-
-OVERPASS_API_URL = "https://overpass-api.de/api/interpreter"
-OVERPASS_TIMEOUT = 30.0
 
 
 def _clamp_01(value: float) -> float:
@@ -20,15 +25,15 @@ def _clamp_01(value: float) -> float:
 def _build_bbox(
     points: list[tuple[float, float]],
     *,
-    pad_degrees: float = 0.0015,
+    pad_degrees: float = DEFAULT_BBOX_PAD_DEGREES,
 ) -> tuple[float, float, float, float]:
     lats = [p[0] for p in points]
     lngs = [p[1] for p in points]
     return (
-        min(lats) - pad_degrees,  # south
-        min(lngs) - pad_degrees,  # west
-        max(lats) + pad_degrees,  # north
-        max(lngs) + pad_degrees,  # east
+        min(lats) - pad_degrees,
+        min(lngs) - pad_degrees,
+        max(lats) + pad_degrees,
+        max(lngs) + pad_degrees,
     )
 
 
@@ -39,12 +44,6 @@ def _build_overpass_query(
     north: float,
     east: float,
 ) -> str:
-    # MVP query for:
-    # - lighting
-    # - stairs / lifts / ramps / escalators
-    # - wheelchair accessibility
-    # - waiting-area-ish places
-    # - wifi/opening hours/staffed heuristics
     return f"""
     [out:json][timeout:25];
     (
@@ -89,7 +88,6 @@ def _get_center_lat_lng(el: dict[str, Any]) -> tuple[float, float] | None:
 
 
 def _approx_distance_metres(a: tuple[float, float], b: tuple[float, float]) -> float:
-    # light-weight approximation for short route-corridor checks
     lat1, lon1 = a
     lat2, lon2 = b
     dx = (lon2 - lon1) * 111_320.0
@@ -173,7 +171,6 @@ def _is_staffed(tags: dict[str, Any]) -> bool:
 
 
 def _is_open_ish(tags: dict[str, Any]) -> bool:
-    # MVP heuristic: if opening_hours exists and is not obviously closed/off, count it.
     opening_hours = str(tags.get("opening_hours") or "").strip().lower()
     if not opening_hours:
         return False
@@ -193,20 +190,11 @@ def _is_well_lit(tags: dict[str, Any]) -> bool:
 async def fetch_route_context_features(
     *,
     route_geometry_geojson: dict[str, Any],
-    sample_spacing_metres: float = 300.0,
-    max_route_points: int = 24,
-    near_route_radius_metres: float = 150.0,
+    sample_spacing_metres: float = DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
+    max_route_points: int = DEFAULT_MAX_ROUTE_FETCH_POINTS,
+    near_route_radius_metres: float = DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """
-    Returns a dict with:
-    - safety.lighting_score
-    - accessibility feature estimates
-    - waiting-area feature estimates
-    - warnings
-
-    This is heuristic MVP enrichment from OSM/Overpass.
-    """
     warnings: list[str] = []
 
     try:
@@ -316,7 +304,6 @@ async def fetch_route_context_features(
         ramp = str(tags.get("ramp") or "").strip().lower()
         conveying = str(tags.get("conveying") or "").strip().lower()
 
-        # Lighting
         if el_type == "way":
             if lit_value == "yes":
                 lit_way_count += 1
@@ -326,7 +313,6 @@ async def fetch_route_context_features(
         if highway == "street_lamp":
             street_lamp_count += 1
 
-        # Accessibility
         if highway == "steps":
             stairs_count += 1
 
@@ -346,7 +332,6 @@ async def fetch_route_context_features(
         elif wheelchair == "no":
             wheelchair_no_count += 1
 
-        # Waiting areas / places
         if _safe_waiting_place(tags):
             safe_waiting_area_count += 1
 
@@ -374,9 +359,7 @@ async def fetch_route_context_features(
         )
         lighting_score = round(_clamp_01(raw_lighting_score / 12.0), 4)
 
-    wheelchair_total = (
-        wheelchair_yes_count + wheelchair_limited_count + wheelchair_no_count
-    )
+    wheelchair_total = wheelchair_yes_count + wheelchair_limited_count + wheelchair_no_count
     if wheelchair_total > 0:
         step_free_ratio = round(
             _clamp_01(
@@ -385,7 +368,6 @@ async def fetch_route_context_features(
             4,
         )
     else:
-        # fallback heuristic: if stairs found and no accessibility evidence, assume poor step-free
         if stairs_count > 0:
             step_free_ratio = 0.0
         else:

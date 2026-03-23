@@ -4,13 +4,13 @@ from copy import deepcopy
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.integrations.overpass_client import fetch_route_context_features
 from app.schemas.routes import (
     RouteCandidateInput,
     RouteScoreRequest,
     RouteScoreResponse,
 )
-from app.services.route_crime_aggregator import enrich_route_candidate_safety
-from app.services.route_context_api import fetch_route_context_features
+from app.services.route_safety import enrich_route_candidate_safety
 from app.services.route_scoring import score_route_request
 
 
@@ -40,12 +40,10 @@ async def enrich_route_candidate(
         route_geometry_geojson=enriched.geometry_geojson,
     )
 
-    # Safety features
     enriched.features.safety.incident_density = safety_metrics["incident_density"]
     enriched.features.safety.report_density = safety_metrics["report_density"]
     enriched.features.safety.lighting_score = context["lighting_score"]
 
-    # Accessibility features
     accessibility = context["accessibility"]
     enriched.features.accessibility.stairs_present = accessibility.get("stairs_present")
     enriched.features.accessibility.step_free_ratio = accessibility.get("step_free_ratio")
@@ -53,7 +51,6 @@ async def enrich_route_candidate(
     enriched.features.accessibility.ramp_coverage_ratio = accessibility.get("ramp_coverage_ratio")
     enriched.features.accessibility.escalator_coverage_ratio = accessibility.get("escalator_coverage_ratio")
 
-    # Waiting-area features
     waiting = context["waiting_areas"]
     enriched.features.waiting_areas.safe_waiting_area_count = waiting.get("safe_waiting_area_count")
     enriched.features.waiting_areas.well_lit_waiting_area_count = waiting.get("well_lit_waiting_area_count")

@@ -1,4 +1,4 @@
-from app.services.crime_weights import get_crime_weight, normalize_crime_category
+from app.services.route_safety import get_crime_weight, normalize_crime_category
 
 
 def test_normalize_crime_category_lowercases_and_hyphenates() -> None:

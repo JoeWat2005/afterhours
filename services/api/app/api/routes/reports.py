@@ -11,7 +11,7 @@ from app.schemas.reports import (
     SafetyReportCreate,
     SafetyReportResponse,
 )
-from app.services.report_proximity import list_nearby_reports
+from app.services.route_safety import list_nearby_reports
 
 router = APIRouter()
 
