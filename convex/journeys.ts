@@ -12,11 +12,11 @@ export const listRecentJourneys = query({
   handler: async (ctx) => {
     const identity = await getAuth(ctx);
 
-    return await ctx.db.query("journeys").order("desc").take(10);
+    return await ctx.db.query("journeys").withIndex("by_user", (q: any) => q.eq("userId", identity.subject)).order("desc").take(10);
   }
 });
 
-export const createJourney = mutation({ //Im not sure if users need to be authenticated to use the create journey
+export const createJourney = mutation({ 
   args: {
     start: v.string(),
     destination: v.string()
@@ -31,7 +31,6 @@ export const createJourney = mutation({ //Im not sure if users need to be authen
       start: args.start,
       destination: args.destination,
       createdAt: Date.now(),
-      // lastUpdated: Date.now(),
       status: "draft"
     })
   }
@@ -45,8 +44,14 @@ export const editJourney = mutation({
     },
 
     handler: async (ctx, args) => {
-      const identity = getAuth(ctx);
-    } //tbc
+      const identity = await getAuth(ctx);
+      const journey = await ctx.db.get(args.journeyId);
+      if (!journey) throw new Error("Journey not found");
+      if (journey.userId !== identity.subject) throw new Error("Unauthenticated");
+
+      const { journeyId, ...fields} = args;
+      await ctx.db.patch(journeyId, fields);
+    }
 });
 
 
