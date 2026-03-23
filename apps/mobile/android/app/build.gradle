@@ -99,9 +99,9 @@ packagingOptions {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.algorithmavengers'
+    namespace 'uk.ac.bham.afterhours'
     defaultConfig {
-        applicationId 'com.anonymous.algorithmavengers'
+        applicationId 'uk.ac.bham.afterhours'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

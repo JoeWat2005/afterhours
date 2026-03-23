@@ -1,4 +1,4 @@
-package com.anonymous.algorithmavengers
+package uk.ac.bham.afterhours
 
 import android.app.Application
 import android.content.res.Configuration
