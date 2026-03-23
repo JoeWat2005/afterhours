@@ -16,7 +16,7 @@ def test_iter_route_points_linestring():
         ],
     }
 
-    points = police_api._iter_route_points(geometry)
+    points = police_api.iter_route_points(geometry)
 
     assert points == [
         (52.4862, -1.8904),
@@ -31,23 +31,38 @@ def test_iter_route_points_invalid_geometry():
     }
 
     with pytest.raises(ValueError):
-        police_api._iter_route_points(geometry)
+        police_api.iter_route_points(geometry)
 
 
-def test_sample_route_points_keeps_edges():
+def test_sample_route_points_by_distance_keeps_edges():
     points = [
-        (1, 1),
-        (2, 2),
-        (3, 3),
-        (4, 4),
-        (5, 5),
+        (52.4862, -1.8904),
+        (52.4864, -1.8902),
+        (52.4866, -1.8900),
+        (52.4868, -1.8898),
+        (52.4870, -1.8896),
     ]
 
-    sampled = police_api._sample_route_points(points, max_points=3)
+    sampled = police_api.sample_route_points_by_distance(
+        points,
+        spacing_metres=10,
+        max_points=3,
+    )
 
-    assert sampled[0] == (1, 1)
-    assert sampled[-1] == (5, 5)
+    assert sampled[0] == points[0]
+    assert sampled[-1] == points[-1]
     assert len(sampled) <= 3
+
+
+def test_route_length_metres_positive_for_simple_line():
+    points = [
+        (52.4862, -1.8904),
+        (52.4868, -1.8898),
+    ]
+
+    result = police_api.route_length_metres(points)
+
+    assert result > 0
 
 
 def test_normalize_crime_valid():
