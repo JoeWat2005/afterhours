@@ -22,26 +22,26 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    api_prefix: str = Field(validation_alias="API_PREFIX")
-    host: str = Field(validation_alias="HOST")
-    port: int = Field(validation_alias="PORT")
-    reload: bool = Field(validation_alias="RELOAD")
+    api_prefix: str = Field(default="/v1", validation_alias="API_PREFIX")
+    host: str = Field(default="0.0.0.0", validation_alias="HOST")
+    port: int = Field(default=8000, validation_alias="PORT")
+    reload: bool = Field(default=False, validation_alias="RELOAD")
 
-    environment: str = Field(validation_alias="APP_ENV")
-    database_url: str = Field(validation_alias="DATABASE_URL")
-    redis_url: str = Field(validation_alias="REDIS_URL")
+    environment: str = Field(default="development", validation_alias="APP_ENV")
+    database_url: str = Field(
+        default="postgresql+psycopg://afterhours:afterhours@localhost:5432/afterhours",
+        validation_alias="DATABASE_URL",
+    )
+    redis_url: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
 
     clerk_issuer_url: str = Field(
+        default="https://example.clerk.accounts.dev",
         validation_alias=AliasChoices("CLERK_ISSUER_URL", "CLERK_JWT_ISSUER_DOMAIN"),
     )
-    convex_deployment_url: str = Field(validation_alias="CONVEX_DEPLOYMENT_URL")
-
-    route_score_weight_safety: float = Field(validation_alias="ROUTE_SCORE_WEIGHT_SAFETY")
-    route_score_weight_speed: float = Field(validation_alias="ROUTE_SCORE_WEIGHT_SPEED")
-    route_score_weight_accessibility: float = Field(
-        validation_alias="ROUTE_SCORE_WEIGHT_ACCESSIBILITY"
+    convex_deployment_url: str = Field(
+        default="https://example.convex.cloud",
+        validation_alias="CONVEX_DEPLOYMENT_URL",
     )
-
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
