@@ -1,4 +1,14 @@
 {
-  "compilerOptions": {},
-  "extends": "expo/tsconfig.base"
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "exclude": [
+    "node_modules",
+    "apps",
+    "services",
+    "infra",
+    "docker",
+    "docs"
+  ]
 }
