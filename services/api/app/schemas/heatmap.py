@@ -51,3 +51,29 @@ class HeatmapResponse(BaseModel):
 
     # List of heatmap cell responses
     items: list[HeatmapCellResponse]
+
+
+class HeatmapCellInput(BaseModel):
+    """
+    Schema for a single cell submitted by the worker during heatmap aggregation.
+
+    Fields:
+    - cell_geometry_wkt: WKT POLYGON string (SRID 4326) from HeatmapEngine
+    - risk_score: computed risk value (totalPoints from HeatmapEngine)
+    - source_count: number of crimes that contributed to this cell's score
+    """
+
+    cell_geometry_wkt: str
+    risk_score: float = 0.0
+    source_count: int = 0
+
+
+class HeatmapIngestRequest(BaseModel):
+    """
+    Payload submitted by the aggregate_heatmaps worker job.
+
+    Fields:
+    - cells: list of scored grid cells to upsert into heatmap_cells
+    """
+
+    cells: list[HeatmapCellInput]

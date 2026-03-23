@@ -1,12 +1,15 @@
 import json
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, Query
+from geoalchemy2.elements import WKTElement
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.heatmap_cell import HeatmapCell
-from app.schemas.heatmap import HeatmapCellResponse, HeatmapResponse
+from app.schemas.heatmap import HeatmapCellResponse, HeatmapIngestRequest, HeatmapResponse
 
 # Create a router instance for heatmap-related endpoints
 router = APIRouter()
@@ -79,3 +82,50 @@ async def list_heatmap(
 
     # Return structured API response
     return HeatmapResponse(items=items)
+
+
+@router.post("/ingest", status_code=204)
+async def ingest_heatmap_cells(
+    payload: HeatmapIngestRequest,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """
+    Upsert a batch of scored heatmap cells produced by the worker's HeatmapEngine.
+
+    Purpose:
+    - Called by the aggregate_heatmaps worker job after scoring a grid.
+    - Inserts new cells or updates existing ones based on geometry equality.
+    - Skips cells with a risk_score of 0 to keep the table lean.
+
+    Body:
+    - cells: list of HeatmapCellInput objects (cell_geometry_wkt, risk_score, source_count)
+    """
+    now = datetime.now(UTC)
+
+    rows = [
+        {
+            "cell_geometry": WKTElement(cell.cell_geometry_wkt, srid=4326),
+            "risk_score": cell.risk_score,
+            "source_count": cell.source_count,
+            "updated_at": now,
+        }
+        for cell in payload.cells
+        if cell.risk_score > 0  # skip empty cells to keep the table lean
+    ]
+
+    if not rows:
+        return
+
+    # PostgreSQL upsert: insert or update on geometry conflict
+    stmt = pg_insert(HeatmapCell).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["cell_geometry"],
+        set_={
+            "risk_score": stmt.excluded.risk_score,
+            "source_count": stmt.excluded.source_count,
+            "updated_at": stmt.excluded.updated_at,
+        },
+    )
+    await db.execute(stmt)
+    await db.commit()
+
