@@ -1,33 +1,30 @@
 import type { PropsWithChildren } from "react";
 
-import { ClerkProvider, useAuth } from "@clerk/expo";
-import { tokenCache } from "@clerk/expo/token-cache";
+import { useAuth } from "@clerk/expo";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 
 import { env } from "../lib/env";
 import { UiPreferencesProvider } from "./UIPreferences";
 
-const convexClient = env.convexUrl ? new ConvexReactClient(env.convexUrl) : null;
+const convexClient = env.convexUrl
+  ? new ConvexReactClient(env.convexUrl)
+  : null;
 
 export function AppProviders({ children }: PropsWithChildren) {
   let content = children;
 
-  if (env.clerkPublishableKey && convexClient) {
+  // ✅ If Convex + Clerk → use Clerk auth from ROOT
+  if (convexClient) {
     content = (
-      <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
-        <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
-          {children}
-        </ConvexProviderWithClerk>
-      </ClerkProvider>
-    );
-  } else if (env.clerkPublishableKey) {
-    content = (
-      <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
+      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
         {children}
-      </ClerkProvider>
+      </ConvexProviderWithClerk>
     );
-  } else if (convexClient) {
+  }
+
+  // ✅ Fallback if only Convex (rare)
+  if (!env.clerkPublishableKey && convexClient) {
     content = <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
   }
 
