@@ -12,7 +12,7 @@ HTTP_RETRY_BASE_DELAY_SECONDS: Final[float] = 0.4
 DEFAULT_CATEGORY: Final[str] = "all-crime"
 
 # Route sampling defaults
-DEFAULT_ROUTE_SAMPLE_SPACING_METRES: Final[float] = 250.0
+DEFAULT_ROUTE_SAMPLE_SPACING_METRES: Final[float] = 50
 DEFAULT_MAX_ROUTE_FETCH_POINTS: Final[int] = 24
 
 # Safety/report corridor defaults

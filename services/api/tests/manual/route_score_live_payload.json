@@ -139,6 +139,54 @@
           "max_gap_between_safe_waiting_areas_metres": null
         }
       }
+    },
+    {
+      "candidate_id": "urban-route-c",
+      "provider": "manual",
+      "label": "Shaftesbury Avenue",
+      "distance_metres": 2200,
+      "duration_seconds": 1620,
+      "geometry_geojson": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.1278, 51.5074],
+          [-0.1270, 51.5090],
+          [-0.1262, 51.5108],
+          [-0.1285, 51.5127],
+          [-0.1320, 51.5141],
+          [-0.1375, 51.5150],
+          [-0.1410, 51.5154]
+        ]
+      },
+      "features": {
+        "safety": {
+          "incident_density": null,
+          "lighting_score": null,
+          "report_density": null,
+          "warnings": []
+        },
+        "accessibility": {
+          "step_free_ratio": null,
+          "stairs_present": null,
+          "lift_coverage_ratio": null,
+          "ramp_coverage_ratio": null,
+          "escalator_coverage_ratio": null
+        },
+        "transport": {
+          "night_transport_score": null,
+          "transfer_count": null,
+          "late_service_available": null
+        },
+        "waiting_areas": {
+          "safe_waiting_area_count": null,
+          "well_lit_waiting_area_count": null,
+          "wifi_access_point_count": null,
+          "staffed_venue_count": null,
+          "open_venue_count": null,
+          "waiting_areas_in_safe_areas_ratio": null,
+          "max_gap_between_safe_waiting_areas_metres": null
+        }
+      }
     }
   ]
 }
