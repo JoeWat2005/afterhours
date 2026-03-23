@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -9,6 +10,8 @@ from app.core.route_enrichment_config import (
     DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
     DEFAULT_MAX_ROUTE_FETCH_POINTS,
     DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
+    HTTP_RETRY_ATTEMPTS,
+    HTTP_RETRY_BASE_DELAY_SECONDS,
     OVERPASS_API_URL,
     OVERPASS_TIMEOUT,
 )
@@ -17,9 +20,51 @@ from app.services.route_geometry import (
     sample_route_points_by_distance,
 )
 
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
 
 def _clamp_01(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code in RETRYABLE_STATUS_CODES
+
+
+def _retry_delay_seconds(attempt_index: int) -> float:
+    return HTTP_RETRY_BASE_DELAY_SECONDS * (2**attempt_index)
+
+
+async def _request_with_retries(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs: Any,
+) -> httpx.Response:
+    last_error: Exception | None = None
+
+    for attempt in range(HTTP_RETRY_ATTEMPTS):
+        try:
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            if (
+                not _is_retryable_status(exc.response.status_code)
+                or attempt == HTTP_RETRY_ATTEMPTS - 1
+            ):
+                raise
+        except httpx.RequestError as exc:
+            last_error = exc
+            if attempt == HTTP_RETRY_ATTEMPTS - 1:
+                raise
+
+        await asyncio.sleep(_retry_delay_seconds(attempt))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("HTTP request failed unexpectedly")
 
 
 def _build_bbox(
@@ -233,19 +278,27 @@ async def fetch_route_context_features(
         client = httpx.AsyncClient(timeout=OVERPASS_TIMEOUT)
 
     try:
-        response = await client.post(
+        response = await _request_with_retries(
+            client,
+            "POST",
             OVERPASS_API_URL,
             content=query,
             headers={"Content-Type": "text/plain"},
         )
-        response.raise_for_status()
         payload = response.json()
-    except Exception:
+    except (httpx.HTTPError, RuntimeError):
         return {
             "lighting_score": None,
             "accessibility": {},
             "waiting_areas": {},
             "warnings": ["route_context_api_unavailable"],
+        }
+    except ValueError:
+        return {
+            "lighting_score": None,
+            "accessibility": {},
+            "waiting_areas": {},
+            "warnings": ["route_context_api_invalid_response"],
         }
     finally:
         if owns_client:

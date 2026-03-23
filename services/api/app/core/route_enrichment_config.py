@@ -6,6 +6,8 @@ OVERPASS_API_URL: Final[str] = "https://overpass-api.de/api/interpreter"
 
 DEFAULT_TIMEOUT: Final[float] = 20.0
 OVERPASS_TIMEOUT: Final[float] = 30.0
+HTTP_RETRY_ATTEMPTS: Final[int] = 3
+HTTP_RETRY_BASE_DELAY_SECONDS: Final[float] = 0.4
 
 DEFAULT_CATEGORY: Final[str] = "all-crime"
 

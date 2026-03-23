@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, TypedDict
 
 import httpx
@@ -7,6 +8,8 @@ from app.core.route_enrichment_config import (
     DEFAULT_MAX_ROUTE_FETCH_POINTS,
     DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
     DEFAULT_TIMEOUT,
+    HTTP_RETRY_ATTEMPTS,
+    HTTP_RETRY_BASE_DELAY_SECONDS,
     POLICE_API_BASE_URL,
 )
 from app.services.route_geometry import (
@@ -36,6 +39,49 @@ class RouteCrimeResponse(TypedDict):
     warnings: list[str]
 
 
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code in RETRYABLE_STATUS_CODES
+
+
+def _retry_delay_seconds(attempt_index: int) -> float:
+    return HTTP_RETRY_BASE_DELAY_SECONDS * (2**attempt_index)
+
+
+async def _request_with_retries(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs: Any,
+) -> httpx.Response:
+    last_error: Exception | None = None
+
+    for attempt in range(HTTP_RETRY_ATTEMPTS):
+        try:
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            if (
+                not _is_retryable_status(exc.response.status_code)
+                or attempt == HTTP_RETRY_ATTEMPTS - 1
+            ):
+                raise
+        except httpx.RequestError as exc:
+            last_error = exc
+            if attempt == HTTP_RETRY_ATTEMPTS - 1:
+                raise
+
+        await asyncio.sleep(_retry_delay_seconds(attempt))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("HTTP request failed unexpectedly")
+
+
 async def get_latest_crime_month(client: httpx.AsyncClient | None = None) -> str:
     owns_client = client is None
     if owns_client:
@@ -45,8 +91,7 @@ async def get_latest_crime_month(client: httpx.AsyncClient | None = None) -> str
         )
 
     try:
-        response = await client.get("/crimes-street-dates")
-        response.raise_for_status()
+        response = await _request_with_retries(client, "GET", "/crimes-street-dates")
         payload = response.json()
 
         if not isinstance(payload, list) or not payload:
@@ -82,8 +127,12 @@ async def fetch_street_crimes_for_location(
         if date:
             params["date"] = date
 
-        response = await client.get(f"/crimes-street/{category}", params=params)
-        response.raise_for_status()
+        response = await _request_with_retries(
+            client,
+            "GET",
+            f"/crimes-street/{category}",
+            params=params,
+        )
 
         payload = response.json()
         if not isinstance(payload, list):
@@ -171,18 +220,37 @@ async def fetch_route_crime_points(
         base_url=POLICE_API_BASE_URL,
         timeout=DEFAULT_TIMEOUT,
     ) as client:
-        resolved_month = date or await get_latest_crime_month(client)
+        if date:
+            resolved_month = date
+        else:
+            try:
+                resolved_month = await get_latest_crime_month(client)
+            except (httpx.HTTPError, RuntimeError):
+                resolved_month = "unknown"
+                warnings.append("police_api_month_lookup_failed")
 
+        failed_point_fetches = 0
         for lat, lng in sampled_points:
-            raw_crimes = await fetch_street_crimes_for_location(
-                lat=lat,
-                lng=lng,
-                date=resolved_month,
-                category=category,
-                client=client,
-            )
+            try:
+                raw_crimes = await fetch_street_crimes_for_location(
+                    lat=lat,
+                    lng=lng,
+                    date=None if resolved_month == "unknown" else resolved_month,
+                    category=category,
+                    client=client,
+                )
+            except (httpx.HTTPError, RuntimeError):
+                failed_point_fetches += 1
+                continue
+
             for raw_crime in raw_crimes:
                 deduped_raw_crimes[_crime_identity(raw_crime)] = raw_crime
+
+    if failed_point_fetches:
+        if failed_point_fetches == len(sampled_points):
+            warnings.append("police_api_unavailable")
+        else:
+            warnings.append("police_api_partial_failure")
 
     normalized_points: list[CrimePoint] = []
     skipped_count = 0
@@ -209,5 +277,5 @@ async def fetch_route_crime_points(
         route_geometry_geojson=route_geometry_geojson,
         points=normalized_points,
         point_count=len(normalized_points),
-        warnings=warnings,
+        warnings=sorted(set(warnings)),
     )
