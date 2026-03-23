@@ -96,6 +96,7 @@ class RouteSafetyFeatures(BaseModel):
     incident_density: float | None = Field(default=None, ge=0)
     lighting_score: float | None = Field(default=None, ge=0, le=1)
     report_density: float | None = Field(default=None, ge=0)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class RouteAccessibilityFeatures(BaseModel):
