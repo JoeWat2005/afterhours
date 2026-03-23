@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView, Modal } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUiPreferences } from "../../src/providers/UIPreferences"; 
@@ -8,6 +8,19 @@ export default function ReportScreen() {
   const insets = useSafeAreaInsets();
   const { highContrast } = useUiPreferences(); 
   const [severity, setSeverity] = useState("Medium");
+  const [issueType, setIssueType] = useState("Select type...");
+  const [isDropdownVisible, setDropdownVisible] = useState(false);
+  
+  const issueOptions = [
+    "Crime",
+    "Break-in / Burglary",
+    "Harassment",
+    "Unsafe Area",
+    "Poor Lighting",
+    "Road Hazard / Potholes",
+    "Anti-social Behaviour",
+    "Other"
+  ];
 
   const theme = {
     screenBg: highContrast ? "bg-white" : "bg-[#020617]",
@@ -18,10 +31,12 @@ export default function ReportScreen() {
     inputBg: highContrast ? "bg-white" : "bg-slate-900",
     iconColor: highContrast ? "#0f172a" : "#22d3ee", 
     btnText: highContrast ? "text-white" : "text-slate-950",
+    modalOverlay: "bg-black/60",
   };
 
   return (
     <View className={`flex-1 ${theme.screenBg}`} style={{ paddingTop: insets.top }}>
+      {/* Header Bar */}
       <View className={`flex-row items-center justify-between px-6 py-4 border-b ${theme.cardBorder}`}>
         <View className="flex-row items-center">
           <View className={`${highContrast ? "bg-slate-200" : "bg-slate-800"} p-2 rounded-xl mr-3`}>
@@ -45,6 +60,18 @@ export default function ReportScreen() {
       <ScrollView className="px-6 mt-6">
         <Text className={`text-2xl font-bold ${theme.textPrimary}`}>Report an Issue</Text>
         <Text className={`${theme.textSecondary} mb-8`}>Help keep the community informed</Text>
+
+        {/* Issue Type Dropdown Trigger */}
+        <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Issue Type</Text>
+        <Pressable 
+          onPress={() => setDropdownVisible(true)}
+          className={`p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder} mb-6 flex-row justify-between items-center shadow-sm`}
+        >
+          <Text className={`text-base ${issueType === "Select type..." ? theme.textSecondary : theme.textPrimary}`}>
+            {issueType}
+          </Text>
+          <Ionicons name="chevron-down" size={20} color={theme.iconColor} />
+        </Pressable>
 
         <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Description</Text>
         <View className={`p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder} mb-6 shadow-sm`}>
@@ -70,24 +97,15 @@ export default function ReportScreen() {
         <View className={`flex-row p-1 rounded-2xl border ${theme.cardBg} ${theme.cardBorder} mb-8`}>
           {["Low", "Medium", "High"].map((level) => {
             const isActive = severity === level;
-            
-            const activeColorClass = highContrast 
-              ? "bg-slate-900" 
-              : "bg-cyan-500"; 
+            const activeColorClass = highContrast ? "bg-slate-900" : "bg-cyan-500"; 
 
             return (
               <Pressable
                 key={level}
                 onPress={() => setSeverity(level)}
-                className={`flex-1 py-3 rounded-xl items-center justify-center ${
-                  isActive ? activeColorClass : "bg-transparent"
-                }`}
+                className={`flex-1 py-3 rounded-xl items-center justify-center ${isActive ? activeColorClass : "bg-transparent"}`}
               >
-                <Text 
-                  className={`font-bold ${
-                    isActive ? (highContrast ? "text-white" : "text-slate-950") : theme.textSecondary
-                  }`}
-                >
+                <Text className={`font-bold ${isActive ? (highContrast ? "text-white" : "text-slate-950") : theme.textSecondary}`}>
                   {level}
                 </Text>
               </Pressable>
@@ -99,9 +117,7 @@ export default function ReportScreen() {
           <Text className={`font-bold ${theme.textPrimary}`}>Choose on map</Text>
         </Pressable>
 
-        <Pressable 
-          className={`${highContrast ? "bg-slate-900" : "bg-cyan-500"} py-5 rounded-2xl items-center shadow-lg active:opacity-90`}
-        >
+        <Pressable className={`${highContrast ? "bg-slate-900" : "bg-cyan-500"} py-5 rounded-2xl items-center shadow-lg active:opacity-90`}>
           <Text className={`${highContrast ? "text-white" : "text-slate-950"} font-black text-lg`}>
             Submit Report
           </Text>
@@ -109,6 +125,40 @@ export default function ReportScreen() {
         
         <View className="h-24" /> 
       </ScrollView>
+
+      {/* Dropdown Modal Menu */}
+      <Modal
+        visible={isDropdownVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDropdownVisible(false)}
+      >
+        <Pressable 
+          className={`flex-1 justify-center items-center ${theme.modalOverlay} px-6`}
+          onPress={() => setDropdownVisible(false)}
+        >
+          <View className={`w-full rounded-3xl border ${theme.cardBg} ${theme.cardBorder} p-2 shadow-2xl`}>
+            <Text className={`text-center py-4 font-bold border-b ${theme.cardBorder} ${theme.textPrimary}`}>
+              Select Issue Type
+            </Text>
+            {issueOptions.map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => {
+                  setIssueType(option);
+                  setDropdownVisible(false);
+                }}
+                className="p-5 flex-row justify-between items-center"
+              >
+                <Text className={`text-base ${theme.textPrimary}`}>{option}</Text>
+                {issueType === option && (
+                  <Ionicons name="checkmark-circle" size={22} color={highContrast ? "#0f172a" : "#22d3ee"} />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
