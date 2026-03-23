@@ -38,6 +38,8 @@ This layer helps us avoid building every supporting service ourselves.
 
 ### Convex
 
+Convex functions and schema live under `apps/mobile/convex/` (the mobile app is the Convex deployment root).
+
 Convex is there for:
 
 - realtime sync

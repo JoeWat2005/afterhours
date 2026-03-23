@@ -17,8 +17,7 @@ The project also aligns with UN Sustainable Development Goal 11 by focusing on s
 ```text
 .
 ├── apps/
-│   └── mobile/              Expo / React Native app
-├── convex/                  Realtime sync + document service
+│   └── mobile/              Expo / React Native app (includes convex/ and android/)
 ├── docs/                    Main project docs
 ├── docker/                  Dockerfiles for API and worker
 ├── infra/
@@ -96,10 +95,12 @@ Terraform is only needed if you are doing backend AWS infra stuff.
 ```bash
 npm install
 cp .env.example .env
-npx convex login
-npx convex dev
+cd apps/mobile && npx convex login   # once per machine
+npm run convex:dev                   # from repo root; or: cd apps/mobile && npx convex dev
 npm run mobile:start
 ```
+
+Convex’s project root is `apps/mobile` (where `convex/` lives).
 
 If you are working on the map features, you will need a valid Mapbox token in `.env`.
 
