@@ -8,7 +8,7 @@ export default defineSchema({
     destination: v.string(),
     createdAt: v.number(),
     status: v.string()
-  }).index("by_created_at", ["createdAt"]),
+  }).index("by_user", ["userId"]).index("by_created_at", ["createdAt"]),
 
   safetyReports: defineTable({
     userId: v.string(),
@@ -18,10 +18,4 @@ export default defineSchema({
     createdAt: v.number(),
     status: v.string()
   }).index("by_created_at", ["createdAt"]),
-
-  users: defineTable({
-    name: v.string(),
-    email: v.string(),
-    clerkId: v.string(), 
-  }).index("by_clerk_id", ["clerkId"]),
 });
