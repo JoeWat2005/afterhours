@@ -6,6 +6,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@clerk/clerk-expo";
 import { useMutation, useQuery } from "convex/react";
 
+import { useEmergencyServices } from "../src/features/map/useEmergencyServices";
+
+
 import { MapPreview } from "../src/features/map/MapPreview";
 import { useUiPreferences } from "../src/providers/UIPreferences";
 import { api } from "../convex/_generated/api";
@@ -104,6 +107,9 @@ export default function HomeScreen() {
                     : "border-cyan-400/20 bg-slate-950/84"
                 }`}
               >
+      
+
+
                 <Ionicons
                   name="person-outline"
                   size={24}
@@ -127,6 +133,23 @@ export default function HomeScreen() {
                 />
               </Pressable>
             </Link>
+
+            <Link href= "/emergency" asChild> // - link to emergency services screen
+              <Pressable
+                className={`ml-3 h-14 w-14 items-center justify-center rounded-full border shadow-lg ${
+                  highContrast  
+                  ? "border-red-600/40 bg-red-600/20" // - colours for emergency
+                  : "border-red-500/30 bg-red-500/10"
+                }`}
+              >
+                <Ionicons
+                  name="warning-outline" //warning or medical kit?
+                  size={24} 
+                  color={highContrast ? "#a53434" : "#f9b1b1"}
+                />
+              </Pressable>
+            </Link>
+
           </View>
         </View>
       </View>
