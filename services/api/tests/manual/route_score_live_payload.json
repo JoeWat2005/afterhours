@@ -1,0 +1,192 @@
+{
+  "origin": {
+    "latitude": 51.5074,
+    "longitude": -0.1278,
+    "label": "Trafalgar Square"
+  },
+  "destination": {
+    "latitude": 51.5154,
+    "longitude": -0.1410,
+    "label": "Oxford Circus"
+  },
+  "depart_at": "2026-03-23T22:30:00+00:00",
+  "bias_mode": "balanced",
+  "requirements": {
+    "accessibility": {
+      "avoid_stairs": false,
+      "step_free_access": false,
+      "lifts_available": false,
+      "ramps_available": false,
+      "escalators_available": false
+    },
+    "waiting_areas": {
+      "safe_waiting_areas": true,
+      "well_lit_waiting_areas": false,
+      "wifi_nearby": false,
+      "staffed_venues_nearby": false,
+      "open_venues_nearby": false,
+      "safe_areas_nearby": false
+    }
+  },
+  "preferences": {
+    "accessibility": {
+      "avoid_stairs": false,
+      "step_free_access": true,
+      "lifts_available": false,
+      "ramps_available": true,
+      "escalators_available": false
+    },
+    "waiting_areas": {
+      "safe_waiting_areas": true,
+      "well_lit_waiting_areas": true,
+      "wifi_nearby": false,
+      "staffed_venues_nearby": false,
+      "open_venues_nearby": false,
+      "safe_areas_nearby": false
+    }
+  },
+  "route_candidates": [
+    {
+      "candidate_id": "urban-route-a",
+      "provider": "manual",
+      "label": "Charing Cross Rd",
+      "distance_metres": 2100,
+      "duration_seconds": 1560,
+      "geometry_geojson": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.1278, 51.5074],
+          [-0.1282, 51.5098],
+          [-0.1290, 51.5125],
+          [-0.1300, 51.5145],
+          [-0.1335, 51.5153],
+          [-0.1410, 51.5154]
+        ]
+      },
+      "features": {
+        "safety": {
+          "incident_density": null,
+          "lighting_score": null,
+          "report_density": null,
+          "warnings": []
+        },
+        "accessibility": {
+          "step_free_ratio": null,
+          "stairs_present": null,
+          "lift_coverage_ratio": null,
+          "ramp_coverage_ratio": null,
+          "escalator_coverage_ratio": null
+        },
+        "transport": {
+          "night_transport_score": null,
+          "transfer_count": null,
+          "late_service_available": null
+        },
+        "waiting_areas": {
+          "safe_waiting_area_count": null,
+          "well_lit_waiting_area_count": null,
+          "wifi_access_point_count": null,
+          "staffed_venue_count": null,
+          "open_venue_count": null,
+          "waiting_areas_in_safe_areas_ratio": null,
+          "max_gap_between_safe_waiting_areas_metres": null
+        }
+      }
+    },
+    {
+      "candidate_id": "urban-route-b",
+      "provider": "manual",
+      "label": "Regent Street",
+      "distance_metres": 2300,
+      "duration_seconds": 1500,
+      "geometry_geojson": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.1278, 51.5074],
+          [-0.1252, 51.5092],
+          [-0.1228, 51.5117],
+          [-0.1248, 51.5138],
+          [-0.1298, 51.5150],
+          [-0.1410, 51.5154]
+        ]
+      },
+      "features": {
+        "safety": {
+          "incident_density": null,
+          "lighting_score": null,
+          "report_density": null,
+          "warnings": []
+        },
+        "accessibility": {
+          "step_free_ratio": null,
+          "stairs_present": null,
+          "lift_coverage_ratio": null,
+          "ramp_coverage_ratio": null,
+          "escalator_coverage_ratio": null
+        },
+        "transport": {
+          "night_transport_score": null,
+          "transfer_count": null,
+          "late_service_available": null
+        },
+        "waiting_areas": {
+          "safe_waiting_area_count": null,
+          "well_lit_waiting_area_count": null,
+          "wifi_access_point_count": null,
+          "staffed_venue_count": null,
+          "open_venue_count": null,
+          "waiting_areas_in_safe_areas_ratio": null,
+          "max_gap_between_safe_waiting_areas_metres": null
+        }
+      }
+    },
+    {
+      "candidate_id": "urban-route-c",
+      "provider": "manual",
+      "label": "Shaftesbury Avenue",
+      "distance_metres": 2200,
+      "duration_seconds": 1620,
+      "geometry_geojson": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.1278, 51.5074],
+          [-0.1270, 51.5090],
+          [-0.1262, 51.5108],
+          [-0.1285, 51.5127],
+          [-0.1320, 51.5141],
+          [-0.1375, 51.5150],
+          [-0.1410, 51.5154]
+        ]
+      },
+      "features": {
+        "safety": {
+          "incident_density": null,
+          "lighting_score": null,
+          "report_density": null,
+          "warnings": []
+        },
+        "accessibility": {
+          "step_free_ratio": null,
+          "stairs_present": null,
+          "lift_coverage_ratio": null,
+          "ramp_coverage_ratio": null,
+          "escalator_coverage_ratio": null
+        },
+        "transport": {
+          "night_transport_score": null,
+          "transfer_count": null,
+          "late_service_available": null
+        },
+        "waiting_areas": {
+          "safe_waiting_area_count": null,
+          "well_lit_waiting_area_count": null,
+          "wifi_access_point_count": null,
+          "staffed_venue_count": null,
+          "open_venue_count": null,
+          "waiting_areas_in_safe_areas_ratio": null,
+          "max_gap_between_safe_waiting_areas_metres": null
+        }
+      }
+    }
+  ]
+}

@@ -1,13 +1,24 @@
-def validate_report(report_payload: dict[str, str | float]) -> dict[str, bool | list[str]]:
+def validate_report(report_payload: dict[str, str | float | int | None]) -> dict[str, bool | list[str]]:
     flags: list[str] = []
 
-    if len(str(report_payload["summary"]).strip()) < 8:
+    summary = str(report_payload.get("summary", "") or "").strip()
+    description = str(report_payload.get("description", "") or "").strip()
+
+    if len(summary) < 8:
         flags.append("summary_too_short")
 
-    if len(str(report_payload["description"]).strip()) < 20:
+    if len(description) < 20:
         flags.append("description_too_short")
 
-    if abs(float(report_payload["latitude"])) > 90 or abs(float(report_payload["longitude"])) > 180:
+    latitude_raw = report_payload.get("latitude")
+    longitude_raw = report_payload.get("longitude")
+
+    try:
+        latitude = float(latitude_raw)  # type: ignore[arg-type]
+        longitude = float(longitude_raw)  # type: ignore[arg-type]
+        if abs(latitude) > 90 or abs(longitude) > 180:
+            flags.append("invalid_coordinates")
+    except (TypeError, ValueError):
         flags.append("invalid_coordinates")
 
     return {
