@@ -37,10 +37,15 @@ class SafetyReport(Base):
         nullable=True,
     )
 
-    # Category of the report (e.g., "theft", "poor lighting", "harassment")
-    # - Enables filtering and aggregation
+    # Category chosen for the user-submitted report, keeps the raw app-facing report type for filtering and aggregation
     category: Mapped[str] = mapped_column(
         String(64),
+        nullable=False,
+    )
+
+    # Shared severity level derived from the user report category
+    severity: Mapped[str] = mapped_column(
+        String(16),
         nullable=False,
     )
 
