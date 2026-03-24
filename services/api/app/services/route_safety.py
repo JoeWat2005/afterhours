@@ -412,18 +412,25 @@ def compute_route_safety_metrics(
 ) -> RouteSafetyMetrics:
     geometry = payload["route_geometry_geojson"]
     warnings = list(payload["route_crime_response"]["warnings"])
-    try:
-        route_points = iter_route_points(geometry)
-    except ValueError:
+
+    if not geometry:
         route_points = []
         length_metres = 0.0
         length_km = 0.001
-        warnings.append("invalid_route_geometry")
+        warnings.append("missing_route_geometry")
     else:
-        length_metres = route_length_metres(route_points)
-        length_km = max(length_metres / 1000.0, 0.001)
-        if length_metres <= 0:
+        try:
+            route_points = iter_route_points(geometry)
+        except ValueError:
+            route_points = []
+            length_metres = 0.0
+            length_km = 0.001
             warnings.append("invalid_route_geometry")
+        else:
+            length_metres = route_length_metres(route_points)
+            length_km = max(length_metres / 1000.0, 0.001)
+            if length_metres <= 0:
+                warnings.append("invalid_route_geometry")
 
     incident_density = _compute_incident_density(
         payload=payload,
@@ -485,7 +492,7 @@ async def enrich_route_candidate_safety(
         )
     )
 
-    if db is None:
+    if db is None or not route_geometry_geojson:
         return metrics
 
     route_points = iter_route_points(route_geometry_geojson)

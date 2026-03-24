@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any, TypedDict
+from app.services.route_geometry import route_length_metres
 
 import httpx
 
@@ -199,14 +200,39 @@ def _normalize_crime(raw_crime: dict[str, Any]) -> CrimePoint | None:
 
 async def fetch_route_crime_points(
     *,
-    route_geometry_geojson: dict[str, Any],
+    route_geometry_geojson: dict[str, Any] | None,
     route_id: str | None = None,
     date: str | None = None,
     category: str = DEFAULT_CATEGORY,
     sample_spacing_metres: float = DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
     max_route_points: int = DEFAULT_MAX_ROUTE_FETCH_POINTS,
 ) -> RouteCrimeResponse:
+    if not route_geometry_geojson:
+        return RouteCrimeResponse(
+            schema_version="1.0",
+            route_id=route_id,
+            crime_source="uk_police",
+            crime_month=date or "unknown",
+            route_geometry_geojson={},
+            points=[],
+            point_count=0,
+            warnings=["missing_route_geometry", "no_crime_data_found"],
+        )
+
     route_points = iter_route_points(route_geometry_geojson)
+
+    if not route_points:
+        return RouteCrimeResponse(
+            schema_version="1.0",
+            route_id=route_id,
+            crime_source="uk_police",
+            crime_month=date or "unknown",
+            route_geometry_geojson=route_geometry_geojson,
+            points=[],
+            point_count=0,
+            warnings=["empty_route_geometry", "no_crime_data_found"],
+        )
+
     sampled_points = sample_route_points_by_distance(
         route_points,
         spacing_metres=sample_spacing_metres,

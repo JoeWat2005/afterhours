@@ -234,13 +234,22 @@ def _is_well_lit(tags: dict[str, Any]) -> bool:
 
 async def fetch_route_context_features(
     *,
-    route_geometry_geojson: dict[str, Any],
+    route_geometry_geojson: dict[str, Any] | None,
     sample_spacing_metres: float = DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
     max_route_points: int = DEFAULT_MAX_ROUTE_FETCH_POINTS,
     near_route_radius_metres: float = DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     warnings: list[str] = []
+
+    # ✅ FIX: handle missing geometry
+    if not route_geometry_geojson:
+        return {
+            "lighting_score": None,
+            "accessibility": {},
+            "waiting_areas": {},
+            "warnings": ["missing_route_geometry"],
+        }
 
     try:
         route_points = iter_route_points(route_geometry_geojson)
@@ -257,6 +266,7 @@ async def fetch_route_context_features(
         spacing_metres=sample_spacing_metres,
         max_points=max_route_points,
     )
+
     if not sampled_points:
         return {
             "lighting_score": None,
