@@ -35,10 +35,6 @@
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-web": "^0.21.0",
-<<<<<<< HEAD
-    "react-native-worklets": "^0.7.4",
-=======
->>>>>>> origin/develop
     "semver": "^6.3.1",
     "tailwindcss": "^4.2.1"
   },
