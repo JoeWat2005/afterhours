@@ -7,6 +7,11 @@ import { useUiPreferences } from "../../src/providers/UIPreferences";
 export default function RouteScreen() {
   const insets = useSafeAreaInsets();
   const { highContrast } = useUiPreferences();
+<<<<<<< HEAD
+  const [fromValue, setFromValue] = useState("Old Joe, University of Birmingham");
+  const [toValue, setToValue] = useState("");
+=======
+>>>>>>> origin/develop
 
   const theme = {
     screenBg: highContrast ? "bg-white" : "bg-[#020617]",
@@ -19,6 +24,15 @@ export default function RouteScreen() {
     accentText: highContrast ? "text-white" : "text-slate-950",
   };
 
+<<<<<<< HEAD
+  const handleSwap = () => {
+    const temp = fromValue;
+    setFromValue(toValue);
+    setToValue(temp);
+  };
+
+=======
+>>>>>>> origin/develop
   const steps = [
     { id: 1, road: "University Road West", dist: "400m", status: "Safe", sub: "→ University Rd / Edgbaston Pk Rd jn" },
     { id: 2, road: "Edgbaston Park Road", dist: "550m", status: "Safe", sub: "→ Edgbaston Park Rd / Pritchatts Rd" },
@@ -43,7 +57,17 @@ export default function RouteScreen() {
           <View className="flex-row items-center gap-2 mb-4">
             <View className={`flex-1 flex-row items-center p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder}`}>
               <View className="w-3 h-3 rounded-full bg-emerald-500 mr-3" />
+<<<<<<< HEAD
+              <TextInput 
+                value={fromValue}
+                onChangeText={setFromValue}
+                placeholder="Start location"
+                placeholderTextColor={highContrast ? "#64748b" : "#94a3b8"}
+                className={`flex-1 ${theme.textPrimary}`} 
+              />
+=======
               <TextInput value="Old Joe, University of Birmingham" className={`flex-1 ${theme.textPrimary}`} />
+>>>>>>> origin/develop
             </View>
             <View className={`p-4 rounded-2xl border ${theme.cardBg} ${theme.cardBorder}`}>
               <Ionicons name="location" size={20} color={highContrast ? "#0f172a" : "#22d3ee"} />
@@ -54,17 +78,38 @@ export default function RouteScreen() {
             <Text className="text-cyan-500 font-bold underline">Use my current location</Text>
           </Pressable>
 
+<<<<<<< HEAD
+          {/* Functional Swap Button */}
+          <View className="items-center my-2">
+            <Pressable 
+              onPress={handleSwap}
+              className={`p-2 rounded-full border ${theme.cardBorder} ${theme.cardBg} active:opacity-70`}
+            >
+              <Ionicons name="swap-vertical" size={20} color={highContrast ? "#0f172a" : "#22d3ee"} />
+            </Pressable>
+=======
           <View className="items-center my-2">
             <View className={`p-2 rounded-full border ${theme.cardBorder} ${theme.cardBg}`}>
               <Ionicons name="swap-vertical" size={20} color={highContrast ? "#0f172a" : "#22d3ee"} />
             </View>
+>>>>>>> origin/develop
           </View>
 
           <Text className={`text-xs font-black mb-2 uppercase ${theme.textSecondary}`}>To</Text>
           <View className="flex-row items-center gap-2">
             <View className={`flex-1 flex-row items-center p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder}`}>
               <View className="w-3 h-3 rounded-md bg-rose-500 mr-3" />
+<<<<<<< HEAD
+              <TextInput 
+                value={toValue}
+                onChangeText={setToValue}
+                placeholder="Destination"
+                placeholderTextColor={highContrast ? "#64748b" : "#94a3b8"}
+                className={`flex-1 ${theme.textPrimary}`} 
+              />
+=======
               <TextInput value="Queen Elizabeth Hospital" className={`flex-1 ${theme.textPrimary}`} />
+>>>>>>> origin/develop
             </View>
             <View className={`p-4 rounded-2xl border ${theme.cardBg} ${theme.cardBorder}`}>
               <Ionicons name="pin" size={20} color="#f43f5e" />
@@ -73,12 +118,21 @@ export default function RouteScreen() {
         </View>
 
         {/* Action Buttons */}
+<<<<<<< HEAD
+        <Pressable className={`${theme.accentCyan} py-5 rounded-2xl items-center mb-3 shadow-lg active:opacity-90`}>
+          <Text className={`font-black text-lg ${theme.accentText}`}>Find Safe Route</Text>
+        </Pressable>
+        
+        <Pressable className={`py-4 rounded-2xl border ${theme.cardBorder} ${theme.cardBg} items-center mb-8 active:opacity-70`}>
+          <Text className={`font-bold ${theme.textPrimary}`}>Load Example Route</Text>
+=======
         <Pressable className={`${theme.accentCyan} py-5 rounded-2xl items-center mb-3 shadow-lg`}>
           <Text className={`font-black text-lg ${theme.accentText}`}>Find Safe Route</Text>
         </Pressable>
         
         <Pressable className={`py-4 rounded-2xl border ${theme.cardBorder} ${theme.cardBg} items-center mb-8`}>
           <Text className={`font-bold ${theme.textPrimary}`}>Load Example Route (Old Joe → QE Hospital)</Text>
+>>>>>>> origin/develop
         </Pressable>
 
         {/* Results Card */}
