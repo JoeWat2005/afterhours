@@ -1,0 +1,60 @@
+{
+  "buildFiles": [
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@clerk\\expo\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@rnmapbox\\maps\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\@solana-mobile\\mobile-wallet-adapter-protocol\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\.cxx\\Debug\\1b4q15k2\\x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\.cxx\\Debug\\1b4q15k2\\x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "appmodules",
+      "output": "C:\\Users\\Joseph\\Desktop\\AlgorithmAvengers\\android\\app\\build\\intermediates\\cxx\\Debug\\1b4q15k2\\obj\\x86_64\\libappmodules.so",
+      "runtimeFiles": [
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86_64\\libfbjni.so",
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\a812d4111e89aa72b21e529418fc9d08\\transformed\\react-android-0.83.2-debug\\prefab\\modules\\jsi\\libs\\android.x86_64\\libjsi.so",
+        "C:\\Users\\Joseph\\.gradle\\caches\\9.0.0\\transforms\\a812d4111e89aa72b21e529418fc9d08\\transformed\\react-android-0.83.2-debug\\prefab\\modules\\reactnative\\libs\\android.x86_64\\libreactnative.so"
+      ]
+    },
+    "react_codegen_ClerkExpoSpec::@12191d4ad96d53e65471": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "react_codegen_ClerkExpoSpec"
+    },
+    "react_codegen_SolanaMobileWalletAdapter::@3f2db36c7d2aae804b20": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "react_codegen_SolanaMobileWalletAdapter"
+    },
+    "react_codegen_rnmapbox_maps_specs::@636de9d518b8c337676e": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "react_codegen_rnmapbox_maps_specs"
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\Joseph\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

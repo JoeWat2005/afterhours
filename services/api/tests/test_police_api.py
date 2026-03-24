@@ -1,6 +1,6 @@
 import pytest
 
-from app.services import police_api
+from app.integrations import police_client as police_api
 
 
 # ----------------------------
