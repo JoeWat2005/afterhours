@@ -1,0 +1,50 @@
+// src/features/map/useEmergencyServices.ts
+
+const SEARCH_RADIUS_METRES = 1000;
+
+//constant of place types 
+const PLACE_TYPES = {
+  nearby_hospital: "hospital",
+  nearby_police:   "police",
+  nearby_shelter:  "shelter",
+  nearby_fire_station: "fire_station",
+} as const;
+
+
+//is the emergency service place nearby
+type EmergencyServiceProximity = {
+  nearby_hospital: boolean;
+  nearby_police:   boolean;
+  nearby_shelter:  boolean;
+  nearby_fire_station: boolean;
+};
+
+export function findEmergencyService() {
+  const [proximity, setProximity] = useState<EmergencyServiceProximity>({
+    nearby_hospital: false,
+    nearby_police:   false,
+    nearby_shelter:  false,
+    nearby_fire_station: false,
+  });
+
+  const checkProximity = async (latitude: number, longitude: number) => {
+    const results = await Promise.all(
+      Object.entries(PLACE_TYPES).map(async ([key, placeType]) => {
+        const url =
+          `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+          `?location=${latitude},${longitude}` +
+          `&radius=${SEARCH_RADIUS_METRES}` +
+          `&type=${placeType}` +
+          `&key=${process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        return [key, data.results.length > 0] as const;
+      })
+    );
+
+    setProximity(Object.fromEntries(results) as EmergencyServiceProximity);
+  };
+
+  return { proximity, checkProximity };
+}
