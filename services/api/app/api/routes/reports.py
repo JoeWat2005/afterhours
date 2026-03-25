@@ -14,6 +14,7 @@ from app.schemas.reports import (
     SafetyReportCreate,
     SafetyReportResponse,
 )
+from app.services.safety_reports import get_user_report_severity
 from app.services.route_safety import list_nearby_reports
 
 router = APIRouter()
@@ -26,6 +27,7 @@ def _report_to_response(report: SafetyReport) -> SafetyReportResponse:
         id=report.id,
         user_id=report.user_id,
         category=report.category,
+        severity=report.severity,
         summary=report.summary,
         details=report.details,
         latitude=point.y,
@@ -49,6 +51,7 @@ async def create_report(
     report = SafetyReport(
         user_id=current_user.id,
         category=payload.category,
+        severity=get_user_report_severity(payload.category).value,
         summary=payload.summary,
         details=payload.details,
         location=func.ST_SetSRID(

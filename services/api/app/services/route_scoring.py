@@ -11,11 +11,13 @@ from app.schemas.routes import (
 )
 from app.services.route_ranker import rank_routes
 from app.services.route_requirements import get_unmet_requirements
+from app.services.route_safety_estimator import estimate_route_safety
 
 
 def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
     weights = _get_weights(payload.bias_mode, payload.preferences)
     requirements_applied = payload.requirements.enabled
+    depart_hour = payload.depart_at.hour
 
     distance_values = [candidate.distance_metres for candidate in payload.route_candidates]
     duration_values = [candidate.duration_seconds for candidate in payload.route_candidates]
@@ -24,7 +26,6 @@ def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
         for candidate in payload.route_candidates
         if candidate.features.waiting_areas.safe_waiting_area_count is not None
     ]
-    safety_risk_values = _collect_safety_risk_values(payload.route_candidates)
 
     scored_routes: list[RankedRouteResult] = []
     for candidate in payload.route_candidates:
@@ -34,7 +35,7 @@ def score_route_request(payload: RouteScoreRequest) -> RouteScoreResponse:
             distance_values=distance_values,
             duration_values=duration_values,
             place_values=place_values,
-            safety_risk_values=safety_risk_values,
+            depart_hour=depart_hour,
         )
 
         unmet_requirements = (
@@ -79,12 +80,12 @@ def _score_candidate(
     distance_values: list[int],
     duration_values: list[int],
     place_values: list[int],
-    safety_risk_values: list[float],
+    depart_hour: int,
 ) -> RankedRouteResult:
     features = candidate.features
     warnings: list[str] = list(getattr(features.safety, "warnings", []) or [])
 
-    safety = _score_safety_component(candidate, safety_risk_values, warnings)
+    safety = _score_safety_component(candidate, depart_hour, warnings)
 
     lighting = _read_score(
         features.safety.lighting_score,
@@ -178,42 +179,27 @@ def _score_candidate(
 
 def _score_safety_component(
     candidate: RouteCandidateInput,
-    safety_risk_values: list[float],
+    depart_hour: int,
     warnings: list[str],
 ) -> float:
-    risk_inputs: list[float] = []
+    safety_features = candidate.features.safety
+    has_data = (
+        safety_features.incident_density is not None
+        or safety_features.report_density is not None
+    )
 
-    if candidate.features.safety.incident_density is not None:
-        risk_inputs.append(float(candidate.features.safety.incident_density))
-    if candidate.features.safety.report_density is not None:
-        risk_inputs.append(float(candidate.features.safety.report_density))
-
-    if not risk_inputs:
+    if not has_data:
         warnings.append("missing_safety_data")
-        return _scoring_number("default_component_score")
 
-    raw_risk = sum(risk_inputs) / len(risk_inputs)
+    estimate = estimate_route_safety(
+        incident_density=safety_features.incident_density,
+        report_density=safety_features.report_density,
+        route_length_km=candidate.distance_metres / 1000,
+        lighting_score=safety_features.lighting_score,
+        depart_hour=depart_hour,
+    )
 
-    if len(safety_risk_values) <= 1:
-        return _scoring_number("default_component_score")
-
-    return _clamp_score(_relative_inverse_score(raw_risk, safety_risk_values))
-
-
-def _collect_safety_risk_values(candidates: list[RouteCandidateInput]) -> list[float]:
-    values: list[float] = []
-
-    for candidate in candidates:
-        risk_inputs: list[float] = []
-        if candidate.features.safety.incident_density is not None:
-            risk_inputs.append(float(candidate.features.safety.incident_density))
-        if candidate.features.safety.report_density is not None:
-            risk_inputs.append(float(candidate.features.safety.report_density))
-
-        if risk_inputs:
-            values.append(sum(risk_inputs) / len(risk_inputs))
-
-    return values
+    return _clamp_score(round(estimate["safety_score"], _scoring_precision("component_precision")))
 
 
 def _read_score(

@@ -242,7 +242,6 @@ async def fetch_route_context_features(
 ) -> dict[str, Any]:
     warnings: list[str] = []
 
-    # ✅ FIX: handle missing geometry
     if not route_geometry_geojson:
         return {
             "lighting_score": None,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from math import cos, floor, radians
@@ -17,45 +18,20 @@ from app.core.route_enrichment_config import (
     DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
     DEFAULT_RUNTIME_CELL_SIZE_METRES,
 )
+from app.core.route_risk_config import (
+    DEFAULT_POLICE_CRIME_SEVERITY,
+    POLICE_CRIME_CATEGORY_SEVERITY,
+    ReportSeverity,
+    SEVERITY_WEIGHTS,
+)
 from app.integrations.police_client import RouteCrimeResponse, fetch_route_crime_points
 from app.models.report import SafetyReport
+from app.services.safety_reports import get_severity_weight
 from app.services.route_geometry import (
     iter_route_points,
     route_length_metres,
     sample_route_points_by_distance,
 )
-
-
-CRIME_SCORING: dict[str, int] = {
-    "violent-crime": 10,
-    "sexual-offences": 10,
-    "possession-of-weapons": 10,
-    "robbery": 5,
-    "theft-from-the-person": 5,
-    "public-order": 3,
-    "drugs": 3,
-    "anti-social-behaviour": 2,
-    "burglary": 2,
-    "vehicle-crime": 2,
-    "criminal-damage-arson": 2,
-    "shoplifting": 1,
-    "bicycle-theft": 1,
-    "other-theft": 1,
-    "other-crime": 1,
-}
-
-
-REPORT_CATEGORY_WEIGHTS: dict[str, int] = {
-    "assault": 4,
-    "robbery": 4,
-    "harassment": 3,
-    "theft": 3,
-    "suspicious activity": 2,
-    "poor lighting": 2,
-    "unsafe crossing": 2,
-    "hazard": 1,
-    "other": 1,
-}
 
 
 class HeatmapCell(TypedDict, total=False):
@@ -86,24 +62,22 @@ class RouteCrimeAggregationInput(TypedDict):
     cell_size_metres: float
 
 
-def normalize_crime_category(category: str | None) -> str:
+def normalize_police_crime_category(category: str | None) -> str:
     if not category:
         return "other-crime"
     return category.strip().lower().replace(" ", "-")
 
 
+def get_police_crime_severity(category: str | None) -> ReportSeverity:
+    normalized_category = normalize_police_crime_category(category)
+    return POLICE_CRIME_CATEGORY_SEVERITY.get(
+        normalized_category,
+        DEFAULT_POLICE_CRIME_SEVERITY,
+    )
+
+
 def get_crime_weight(category: str | None) -> int:
-    return CRIME_SCORING.get(normalize_crime_category(category), 1)
-
-
-def normalize_report_category(category: str | None) -> str:
-    if not category:
-        return "other"
-    return category.strip().lower()
-
-
-def get_report_weight(category: str | None) -> int:
-    return REPORT_CATEGORY_WEIGHTS.get(normalize_report_category(category), 1)
+    return SEVERITY_WEIGHTS[get_police_crime_severity(category)]
 
 
 def utc_now() -> datetime:
@@ -193,7 +167,9 @@ def compute_report_density(
     if not reports_list:
         return None
 
-    weighted_total = sum(get_report_weight(report.category) for report in reports_list)
+    weighted_total = sum(
+        get_severity_weight(report.severity) for report in reports_list
+    )
     return round(weighted_total / route_length_km, 4)
 
 

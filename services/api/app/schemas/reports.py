@@ -36,6 +36,8 @@ CANONICAL_CATEGORY_BY_ALIAS: dict[str, str] = {
     "other": "other",
 }
 
+from app.core.route_risk_config import ReportSeverity
+
 
 class SafetyReportCreate(BaseModel):
     """
@@ -59,7 +61,7 @@ class SafetyReportCreate(BaseModel):
     # ID of the user submitting the report (optional/anonymous allowed)
     user_id: UUID | None = None
 
-    # Category/type of the report (e.g., "theft", "lighting")
+    # User-facing category for the submitted report
     category: str = Field(min_length=1, max_length=64)
 
     # Short summary of the issue
@@ -113,8 +115,11 @@ class SafetyReportResponse(BaseModel):
     # User who submitted the report
     user_id: UUID | None
 
-    # Category/type of the report
+    # User-facing report category
     category: str
+
+    # Severity level worked out from the category
+    severity: ReportSeverity
 
     # Short summary
     summary: str
