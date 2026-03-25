@@ -1,4 +1,5 @@
-# Empirical Bayes safety estimator. Shrinks observed crime/report densities toward an existing mean so that routes with sparse data don't get wildly over or under scored. 
+# Empirical Bayes safety estimator. 
+# Shrinks observed crime/report densities toward an existing mean so that routes with sparse data don't get wildly over or under scored. 
 # Uses a gamma poisson conjugate, a bit more reflective than raw averages.
 
 import math
