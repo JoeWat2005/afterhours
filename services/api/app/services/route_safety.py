@@ -530,5 +530,9 @@ async def enrich_route_candidate_safety(
         route_length_km=metrics["route_length_km"],
         corridor_half_width_metres=metrics["corridor_half_width_metres"],
         cell_size_metres=metrics["cell_size_metres"],
+<<<<<<< HEAD
         heatmap_cells=metrics["heatmap_cells"],
+=======
+        heatmap_cells=[],
+>>>>>>> feat/updates
     )
