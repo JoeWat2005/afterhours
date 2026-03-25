@@ -32,11 +32,38 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="route"
+        options={{
+          title: "Route",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="navigate-outline" size={26} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="report"
         options={{
           title: "Report",
           tabBarIcon: ({ color }) => (
             <Ionicons name="warning-outline" size={26} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="report_list"
+        options={{
+          title: "Reports",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="list-outline" size={26} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="services"
+        options={{
+          title: "Services",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="medkit-outline" size={26} color={color} />
           ),
         }}
       />

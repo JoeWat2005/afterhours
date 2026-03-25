@@ -14,12 +14,17 @@ export default defineSchema({
 
   safetyReports: defineTable({
     userId: v.string(),
+    apiReportId: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
     location: v.string(),
     description: v.optional(v.string()),
     category: v.string(),
     createdAt: v.number(),
     status: v.string()
-  }).index("by_created_at", ["createdAt"]),
+  })
+    .index("by_created_at", ["createdAt"])
+    .index("by_api_report_id", ["apiReportId"]),
 
   users: defineTable({
     name: v.string(),

@@ -1,159 +1,374 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, Modal } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useAuth } from "@clerk/expo";
+import { useMutation } from "convex/react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUiPreferences } from "../../src/providers/UIPreferences"; 
+
+import { api } from "../../convex/_generated/api";
+import {
+  apiRequest,
+  geocodePlace,
+  logPrototypeEvent,
+  type SafetyReportResponse,
+} from "../../src/lib/api";
+import { mapUiIssueToCategories } from "../../src/features/reports/categories";
+import { useUiPreferences } from "../../src/providers/UIPreferences";
+
+const ISSUE_OPTIONS = [
+  "Crime",
+  "Break-in / Burglary",
+  "Harassment",
+  "Unsafe Area",
+  "Poor Lighting",
+  "Road Hazard / Potholes",
+  "Anti-social Behaviour",
+  "Other",
+];
+const ISSUE_PLACEHOLDER = "Select type...";
+
+type ValidationResponse = {
+  accepted: boolean;
+  moderation_flags: string[];
+};
+
+function parseCoordinate(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
 
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();
-  const { highContrast } = useUiPreferences(); 
-  const [severity, setSeverity] = useState("Medium");
-  const [issueType, setIssueType] = useState("Select type...");
-  const [isDropdownVisible, setDropdownVisible] = useState(false);
-  
-  const issueOptions = [
-    "Crime",
-    "Break-in / Burglary",
-    "Harassment",
-    "Unsafe Area",
-    "Poor Lighting",
-    "Road Hazard / Potholes",
-    "Anti-social Behaviour",
-    "Other"
-  ];
+  const { highContrast } = useUiPreferences();
+  const { getToken } = useAuth();
+  const createRealtimeReport = useMutation(api.reports.createReport);
+
+  const [issueType, setIssueType] = useState(ISSUE_PLACEHOLDER);
+  const [description, setDescription] = useState("");
+  const [area, setArea] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const theme = {
     screenBg: highContrast ? "bg-white" : "bg-[#020617]",
     cardBg: highContrast ? "bg-slate-100" : "bg-slate-900/50",
     cardBorder: highContrast ? "border-slate-300" : "border-cyan-500/20",
+    inputBg: highContrast ? "bg-white" : "bg-slate-900",
     textPrimary: highContrast ? "text-slate-950" : "text-white",
     textSecondary: highContrast ? "text-slate-500" : "text-slate-400",
-    inputBg: highContrast ? "bg-white" : "bg-slate-900",
-    iconColor: highContrast ? "#0f172a" : "#22d3ee", 
-    btnText: highContrast ? "text-white" : "text-slate-950",
-    modalOverlay: "bg-black/60",
+    accentBg: highContrast ? "bg-slate-900" : "bg-cyan-500",
   };
+
+  async function resolveCoordinates() {
+    const parsedLatitude = parseCoordinate(latitude);
+    const parsedLongitude = parseCoordinate(longitude);
+    if (parsedLatitude !== null && parsedLongitude !== null) {
+      return {
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
+        label:
+          area.trim() ||
+          `${parsedLatitude.toFixed(5)}, ${parsedLongitude.toFixed(5)}`,
+      };
+    }
+
+    const trimmedArea = area.trim();
+    if (!trimmedArea) {
+      throw new Error("Add area or coordinates before submitting.");
+    }
+
+    setResolvingLocation(true);
+    try {
+      const [match] = await geocodePlace(trimmedArea, { limit: 1 });
+      if (!match) {
+        throw new Error("Could not resolve area coordinates.");
+      }
+      setLatitude(match.latitude.toFixed(6));
+      setLongitude(match.longitude.toFixed(6));
+      return {
+        latitude: match.latitude,
+        longitude: match.longitude,
+        label: match.label,
+      };
+    } finally {
+      setResolvingLocation(false);
+    }
+  }
+
+  async function handleSubmit() {
+    if (submitting) return;
+    setError(null);
+    setFeedback(null);
+
+    if (issueType === ISSUE_PLACEHOLDER) {
+      setError("Select an issue type.");
+      return;
+    }
+    if (description.trim().length < 12) {
+      setError("Description must be at least 12 characters.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const coords = await resolveCoordinates();
+      const mappedCategory = mapUiIssueToCategories(issueType);
+      const summary = `${issueType} near ${area.trim() || "selected location"}`.slice(
+        0,
+        280,
+      );
+
+      const validation = await apiRequest<ValidationResponse>(
+        "/routes/reports/validate",
+        getToken,
+        {
+          method: "POST",
+          requireAuth: false,
+          body: {
+            category: mappedCategory.canonical,
+            summary,
+            description: description.trim(),
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          },
+        },
+      );
+      if (!validation.accepted) {
+        throw new Error(
+          `Report blocked: ${validation.moderation_flags.join(", ") || "unknown reason"}`,
+        );
+      }
+
+      const saved = await apiRequest<SafetyReportResponse>("/reports", getToken, {
+        method: "POST",
+        body: {
+          category: mappedCategory.canonical,
+          summary,
+          details: description.trim(),
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+      });
+
+      try {
+        await createRealtimeReport({
+          apiReportId: saved.id,
+          latitude: saved.latitude,
+          longitude: saved.longitude,
+          category: mappedCategory.convex,
+          description: saved.summary,
+          location: `${coords.label} (${saved.latitude.toFixed(5)}, ${saved.longitude.toFixed(5)})`,
+        });
+      } catch (mirrorError) {
+        const message =
+          mirrorError instanceof Error
+            ? mirrorError.message
+            : "Convex realtime mirror failed.";
+        logPrototypeEvent("report_realtime_mirror_failed", { error: message, id: saved.id });
+      }
+
+      setDescription("");
+      setArea("");
+      setFeedback("Report submitted.");
+      router.push("/(tabs)/report_list");
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Failed to submit report.";
+      logPrototypeEvent("report_submit_failed", { error: message });
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <View className={`flex-1 ${theme.screenBg}`} style={{ paddingTop: insets.top }}>
-      {/* Header Bar */}
-      <View className={`flex-row items-center justify-between px-6 py-4 border-b ${theme.cardBorder}`}>
-        <View className="flex-row items-center">
-          <View className={`${highContrast ? "bg-slate-200" : "bg-slate-800"} p-2 rounded-xl mr-3`}>
-            <Ionicons name="location" size={18} color={theme.iconColor} />
-          </View>
-          <View>
-            <Text className={`text-xl font-bold ${theme.textPrimary}`}>AfterHours</Text>
-            <Text className={`text-[10px] font-bold uppercase tracking-[2px] ${theme.textSecondary}`}>UK Safety Map</Text>
-          </View>
+      <ScrollView className="px-6" contentContainerStyle={{ paddingBottom: 110 }}>
+        <View className="mt-4 mb-5">
+          <Text className={`text-2xl font-bold ${theme.textPrimary}`}>Report safety issue</Text>
+          <Text className={`mt-1 text-sm ${theme.textSecondary}`}>
+            Writes to backend and mirrors to Convex for realtime updates.
+          </Text>
         </View>
-        
-        <View className="flex-row gap-2">
-          {["HC", "Aa", "Heat"].map((btn) => (
-            <View key={btn} className={`${highContrast ? "bg-slate-200" : "bg-slate-800"} px-3 py-1 rounded-md`}>
-              <Text className={`${highContrast ? "text-slate-900" : "text-white"} text-xs font-bold`}>{btn}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
 
-      <ScrollView className="px-6 mt-6">
-        <Text className={`text-2xl font-bold ${theme.textPrimary}`}>Report an Issue</Text>
-        <Text className={`${theme.textSecondary} mb-8`}>Help keep the community informed</Text>
-
-        {/* Issue Type Dropdown Trigger */}
-        <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Issue Type</Text>
-        <Pressable 
+        <Text className={`text-xs font-bold uppercase mb-2 ${theme.textSecondary}`}>Issue type</Text>
+        <Pressable
           onPress={() => setDropdownVisible(true)}
-          className={`p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder} mb-6 flex-row justify-between items-center shadow-sm`}
+          className={`rounded-2xl border px-4 py-4 ${theme.inputBg} ${theme.cardBorder}`}
         >
-          <Text className={`text-base ${issueType === "Select type..." ? theme.textSecondary : theme.textPrimary}`}>
+          <Text
+            className={
+              issueType === ISSUE_PLACEHOLDER ? theme.textSecondary : theme.textPrimary
+            }
+          >
             {issueType}
           </Text>
-          <Ionicons name="chevron-down" size={20} color={theme.iconColor} />
         </Pressable>
 
-        <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Description</Text>
-        <View className={`p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder} mb-6 shadow-sm`}>
+        <Text className={`text-xs font-bold uppercase mt-4 mb-2 ${theme.textSecondary}`}>Description</Text>
+        <View className={`rounded-2xl border px-4 py-3 ${theme.inputBg} ${theme.cardBorder}`}>
           <TextInput
+            value={description}
+            onChangeText={setDescription}
             multiline
-            placeholder="Describe what happened..."
-            placeholderTextColor={highContrast ? "#94a3b8" : "#475569"}
-            className={`text-base ${theme.textPrimary}`}
-            style={{ textAlignVertical: "top", minHeight: 100 }}
+            placeholder="Describe what happened"
+            placeholderTextColor={highContrast ? "#64748b" : "#475569"}
+            className={theme.textPrimary}
+            style={{ minHeight: 100, textAlignVertical: "top" }}
           />
         </View>
 
-        <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Address / Area</Text>
-        <View className={`p-4 rounded-2xl border ${theme.inputBg} ${theme.cardBorder} mb-6 shadow-sm`}>
+        <Text className={`text-xs font-bold uppercase mt-4 mb-2 ${theme.textSecondary}`}>Area</Text>
+        <View className={`rounded-2xl border px-4 py-3 ${theme.inputBg} ${theme.cardBorder}`}>
           <TextInput
-            placeholder="Street or area..."
-            placeholderTextColor={highContrast ? "#94a3b8" : "#475569"}
-            className={`text-base ${theme.textPrimary}`}
+            value={area}
+            onChangeText={setArea}
+            placeholder="Street or area"
+            placeholderTextColor={highContrast ? "#64748b" : "#475569"}
+            className={theme.textPrimary}
           />
         </View>
 
-        <Text className={`font-bold text-xs uppercase tracking-widest mb-3 ml-1 ${theme.textSecondary}`}>Severity</Text>
-        <View className={`flex-row p-1 rounded-2xl border ${theme.cardBg} ${theme.cardBorder} mb-8`}>
-          {["Low", "Medium", "High"].map((level) => {
-            const isActive = severity === level;
-            const activeColorClass = highContrast ? "bg-slate-900" : "bg-cyan-500"; 
-
-            return (
-              <Pressable
-                key={level}
-                onPress={() => setSeverity(level)}
-                className={`flex-1 py-3 rounded-xl items-center justify-center ${isActive ? activeColorClass : "bg-transparent"}`}
-              >
-                <Text className={`font-bold ${isActive ? (highContrast ? "text-white" : "text-slate-950") : theme.textSecondary}`}>
-                  {level}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <Text className={`text-xs font-bold uppercase mt-4 mb-2 ${theme.textSecondary}`}>
+          Coordinates (optional)
+        </Text>
+        <View className="flex-row">
+          <View className={`flex-1 mr-2 rounded-2xl border px-4 py-3 ${theme.inputBg} ${theme.cardBorder}`}>
+            <TextInput
+              value={latitude}
+              onChangeText={setLatitude}
+              placeholder="Latitude"
+              keyboardType="numbers-and-punctuation"
+              placeholderTextColor={highContrast ? "#64748b" : "#475569"}
+              className={theme.textPrimary}
+            />
+          </View>
+          <View className={`flex-1 ml-2 rounded-2xl border px-4 py-3 ${theme.inputBg} ${theme.cardBorder}`}>
+            <TextInput
+              value={longitude}
+              onChangeText={setLongitude}
+              placeholder="Longitude"
+              keyboardType="numbers-and-punctuation"
+              placeholderTextColor={highContrast ? "#64748b" : "#475569"}
+              className={theme.textPrimary}
+            />
+          </View>
         </View>
 
-        <Pressable className={`${theme.cardBg} border ${theme.cardBorder} py-4 rounded-2xl items-center mb-6`}>
-          <Text className={`font-bold ${theme.textPrimary}`}>Choose on map</Text>
+        <Pressable
+          onPress={async () => {
+            setError(null);
+            setFeedback(null);
+            try {
+              const coords = await resolveCoordinates();
+              setFeedback(
+                `Coordinates resolved to ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`,
+              );
+            } catch (resolveError) {
+              const message =
+                resolveError instanceof Error
+                  ? resolveError.message
+                  : "Could not resolve coordinates.";
+              setError(message);
+            }
+          }}
+          disabled={resolvingLocation || submitting}
+          className={`mt-4 rounded-2xl border px-4 py-3 items-center ${theme.cardBg} ${theme.cardBorder}`}
+        >
+          {resolvingLocation ? (
+            <ActivityIndicator color={highContrast ? "#0f172a" : "#22d3ee"} />
+          ) : (
+            <Text className={`font-semibold ${theme.textPrimary}`}>Resolve from area</Text>
+          )}
         </Pressable>
 
-        <Pressable className={`${highContrast ? "bg-slate-900" : "bg-cyan-500"} py-5 rounded-2xl items-center shadow-lg active:opacity-90`}>
-          <Text className={`${highContrast ? "text-white" : "text-slate-950"} font-black text-lg`}>
-            Submit Report
-          </Text>
+        {error ? (
+          <View
+            className={`mt-4 rounded-2xl border p-4 ${
+              highContrast
+                ? "border-red-300 bg-red-100"
+                : "border-red-500/40 bg-red-500/10"
+            }`}
+          >
+            <Text className={highContrast ? "text-red-800" : "text-red-200"}>{error}</Text>
+          </View>
+        ) : null}
+
+        {feedback ? (
+          <View
+            className={`mt-4 rounded-2xl border p-4 ${
+              highContrast
+                ? "border-emerald-300 bg-emerald-100"
+                : "border-emerald-500/40 bg-emerald-500/10"
+            }`}
+          >
+            <Text className={highContrast ? "text-emerald-800" : "text-emerald-200"}>
+              {feedback}
+            </Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          onPress={handleSubmit}
+          disabled={submitting || resolvingLocation}
+          className={`mt-5 rounded-2xl px-4 py-4 items-center ${theme.accentBg}`}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text className="text-white font-bold">Submit report</Text>
+          )}
         </Pressable>
-        
-        <View className="h-24" /> 
       </ScrollView>
 
-      {/* Dropdown Modal Menu */}
       <Modal
-        visible={isDropdownVisible}
-        transparent={true}
+        visible={dropdownVisible}
+        transparent
         animationType="fade"
         onRequestClose={() => setDropdownVisible(false)}
       >
-        <Pressable 
-          className={`flex-1 justify-center items-center ${theme.modalOverlay} px-6`}
+        <Pressable
+          className="flex-1 bg-black/60 justify-center px-6"
           onPress={() => setDropdownVisible(false)}
         >
-          <View className={`w-full rounded-3xl border ${theme.cardBg} ${theme.cardBorder} p-2 shadow-2xl`}>
-            <Text className={`text-center py-4 font-bold border-b ${theme.cardBorder} ${theme.textPrimary}`}>
-              Select Issue Type
+          <View className={`rounded-3xl border ${theme.cardBg} ${theme.cardBorder}`}>
+            <Text className={`px-4 py-4 font-bold border-b ${theme.cardBorder} ${theme.textPrimary}`}>
+              Select issue type
             </Text>
-            {issueOptions.map((option) => (
+            {ISSUE_OPTIONS.map((option) => (
               <Pressable
                 key={option}
                 onPress={() => {
                   setIssueType(option);
                   setDropdownVisible(false);
                 }}
-                className="p-5 flex-row justify-between items-center"
+                className="px-4 py-4 flex-row items-center justify-between"
               >
-                <Text className={`text-base ${theme.textPrimary}`}>{option}</Text>
-                {issueType === option && (
-                  <Ionicons name="checkmark-circle" size={22} color={highContrast ? "#0f172a" : "#22d3ee"} />
-                )}
+                <Text className={theme.textPrimary}>{option}</Text>
+                {issueType === option ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={highContrast ? "#0f172a" : "#22d3ee"}
+                  />
+                ) : null}
               </Pressable>
             ))}
           </View>

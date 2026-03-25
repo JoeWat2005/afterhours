@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/expo";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 
+import { RouteSessionProvider } from "../features/route/routeSession";
 import { env } from "../lib/env";
 import { UiPreferencesProvider } from "./UIPreferences";
 
@@ -14,7 +15,6 @@ const convexClient = env.convexUrl
 export function AppProviders({ children }: PropsWithChildren) {
   let content = children;
 
-  // ✅ If Convex + Clerk → use Clerk auth from ROOT
   if (convexClient) {
     content = (
       <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
@@ -23,10 +23,13 @@ export function AppProviders({ children }: PropsWithChildren) {
     );
   }
 
-  // ✅ Fallback if only Convex (rare)
   if (!env.clerkPublishableKey && convexClient) {
     content = <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
   }
 
-  return <UiPreferencesProvider>{content}</UiPreferencesProvider>;
+  return (
+    <UiPreferencesProvider>
+      <RouteSessionProvider>{content}</RouteSessionProvider>
+    </UiPreferencesProvider>
+  );
 }

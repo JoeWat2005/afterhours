@@ -11,3 +11,10 @@ def test_healthcheck_returns_ok() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "afterhours-api"}
+
+
+def test_readiness_returns_ready() -> None:
+    response = client.get("/v1/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "service": "afterhours-api"}
