@@ -3,6 +3,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.route_risk_config import ReportSeverity
 from app.schemas.common import LonLat
 
 
@@ -247,3 +248,4 @@ class SafetyReportValidationResponse(BaseModel):
 
     accepted: bool
     moderation_flags: list[str]
+    severity: ReportSeverity

@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.route_risk_config import ReportSeverity
+
 
 class SafetyReportCreate(BaseModel):
     """
@@ -24,7 +26,7 @@ class SafetyReportCreate(BaseModel):
     # ID of the user submitting the report
     user_id: UUID
 
-    # Category/type of the report (e.g., "theft", "lighting")
+    # User-facing category for the submitted report
     category: str = Field(min_length=1, max_length=64)
 
     # Short summary of the issue
@@ -68,8 +70,11 @@ class SafetyReportResponse(BaseModel):
     # User who submitted the report
     user_id: UUID
 
-    # Category/type of the report
+    # User-facing report category
     category: str
+
+    # Severity level worked out from the category
+    severity: ReportSeverity
 
     # Short summary
     summary: str
