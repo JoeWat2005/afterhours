@@ -166,6 +166,7 @@ def _score_candidate(
         distance_metres=candidate.distance_metres,
         duration_seconds=candidate.duration_seconds,
         geometry_geojson=candidate.geometry_geojson,
+        navigation=candidate.navigation,
         component_scores=component_scores,
         explanation=RouteExplanation(
             summary=_build_summary(candidate.label or candidate.candidate_id, clean_warnings),

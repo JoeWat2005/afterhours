@@ -146,6 +146,27 @@ class RouteCandidateFeatures(BaseModel):
     )
 
 
+class RouteNavigationStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_index: int = Field(ge=0)
+    distance_metres: int = Field(ge=0)
+    duration_seconds: int = Field(ge=0)
+    instruction: str | None = None
+    street_name: str | None = None
+    maneuver_type: str | None = None
+    maneuver_modifier: str | None = None
+    maneuver_location: LonLat | None = None
+    geometry_geojson: dict | None = None
+
+
+class RouteNavigationMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str | None = None
+    steps: list[RouteNavigationStep] = Field(default_factory=list)
+
+
 class RouteCandidateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -155,6 +176,7 @@ class RouteCandidateInput(BaseModel):
     distance_metres: int = Field(gt=0)
     duration_seconds: int = Field(gt=0)
     geometry_geojson: dict | None = None
+    navigation: RouteNavigationMetadata | None = None
     features: RouteCandidateFeatures
 
 
@@ -191,6 +213,7 @@ class RankedRouteResult(BaseModel):
     distance_metres: int = Field(gt=0)
     duration_seconds: int = Field(gt=0)
     geometry_geojson: dict | None = None
+    navigation: RouteNavigationMetadata | None = None
     component_scores: RouteComponentScores
     explanation: RouteExplanation
 
@@ -247,3 +270,23 @@ class SafetyReportValidationResponse(BaseModel):
 
     accepted: bool
     moderation_flags: list[str]
+
+class RoutePlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    origin: RouteLocation
+    destination: RouteLocation
+    depart_at: datetime
+    bias_mode: RouteBiasMode = RouteBiasMode.BALANCED
+    requirements: RouteRequirements = Field(default_factory=RouteRequirements)
+    preferences: RoutePreferences = Field(default_factory=RoutePreferences)
+    alternatives: int = Field(default=3, ge=1, le=5)
+    crime_date: str | None = None
+    crime_category: str = "all-crime"
+
+    @field_validator("depart_at")
+    @classmethod
+    def check_depart_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            raise ValueError("depart_at must include a timezone offset")
+        return value
