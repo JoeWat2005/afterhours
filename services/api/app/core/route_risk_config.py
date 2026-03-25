@@ -59,3 +59,34 @@ POLICE_CRIME_CATEGORY_SEVERITY: Final[dict[str, ReportSeverity]] = {
     "other-theft": ReportSeverity.LOW,
     "other-crime": ReportSeverity.LOW,
 }
+
+
+# empirical bayes estimator config, gamma prior: mean = PRIOR_MEAN_HARM_RATE, pseudo exposure = PRIOR_OBSERVATION_STRENGTH km, so alpha = mean * strength, beta = strength
+PRIOR_MEAN_HARM_RATE: Final[float] = 3.0
+PRIOR_OBSERVATION_STRENGTH: Final[float] = 8.0
+
+# how much we trust each data source (police is the reference)
+POLICE_DATA_RELIABILITY: Final[float] = 1.0
+USER_REPORT_RELIABILITY: Final[float] = 0.6
+
+# rough conversion from weighted harm rate to serious incidents/km, not claiming this is perfect but it gives sensible probabilities
+SERIOUS_RATE_FACTOR: Final[float] = 0.12
+
+# exponential decay for harm rate to 0-1 safety score
+HARM_RATE_DECAY: Final[float] = 0.18
+
+# time of day risk multipliers (start hour inclusive, end hour exclusive, multiplier)
+TIME_RISK_MULTIPLIERS: Final[list[tuple[int, int, float]]] = [
+    (0, 5, 1.4),
+    (5, 7, 1.1),
+    (7, 18, 0.85),
+    (18, 21, 1.0),
+    (21, 24, 1.25),
+]
+
+# lighting score thresholds and the modifier each band applies
+LIGHTING_WELL_LIT_THRESHOLD: Final[float] = 0.65
+LIGHTING_POOR_THRESHOLD: Final[float] = 0.30
+LIGHTING_MODIFIER_WELL_LIT: Final[float] = 0.85
+LIGHTING_MODIFIER_POOR: Final[float] = 1.20
+LIGHTING_MODIFIER_UNKNOWN: Final[float] = 1.10
