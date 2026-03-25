@@ -38,6 +38,14 @@ class Settings(BaseSettings):
         default="https://example.clerk.accounts.dev",
         validation_alias=AliasChoices("CLERK_ISSUER_URL", "CLERK_JWT_ISSUER_DOMAIN"),
     )
+    clerk_jwks_url: str | None = Field(
+        default=None,
+        validation_alias="CLERK_JWKS_URL",
+    )
+    clerk_jwt_audience: str | None = Field(
+        default=None,
+        validation_alias="CLERK_JWT_AUDIENCE",
+    )
     convex_deployment_url: str = Field(
         default="https://example.convex.cloud",
         validation_alias="CONVEX_DEPLOYMENT_URL",

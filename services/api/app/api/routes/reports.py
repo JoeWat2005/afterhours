@@ -1,8 +1,11 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from geoalchemy2.shape import to_shape
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.auth import get_current_app_user
 from app.db.session import get_db
 from app.models.report import SafetyReport
 from app.models.user import AppUser
@@ -37,13 +40,16 @@ def _report_to_response(report: SafetyReport) -> SafetyReportResponse:
 async def create_report(
     payload: SafetyReportCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: AppUser = Depends(get_current_app_user),
 ) -> SafetyReportResponse:
-    user = await db.get(AppUser, payload.user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if payload.user_id is not None and payload.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token subject does not match report user_id",
+        )
 
     report = SafetyReport(
-        user_id=payload.user_id,
+        user_id=current_user.id,
         category=payload.category,
         severity=get_user_report_severity(payload.category).value,
         summary=payload.summary,
@@ -68,7 +74,9 @@ async def nearby_reports(
     radius_metres: int = Query(1000, gt=0, le=10000),
     limit: int = Query(20, gt=0, le=100),
     db: AsyncSession = Depends(get_db),
+    current_user: AppUser = Depends(get_current_app_user),
 ) -> NearbyReportsResponse:
+    _ = current_user
     items = await list_nearby_reports(
         db,
         latitude=latitude,
@@ -80,3 +88,20 @@ async def nearby_reports(
     return NearbyReportsResponse(
         items=[_report_to_response(item) for item in items]
     )
+
+
+@router.get("/{report_id}", response_model=SafetyReportResponse)
+async def get_report(
+    report_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AppUser = Depends(get_current_app_user),
+) -> SafetyReportResponse:
+    _ = current_user
+    stmt = select(SafetyReport).where(SafetyReport.id == report_id)
+    result = await db.execute(stmt)
+    report = result.scalars().first()
+
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    return _report_to_response(report)

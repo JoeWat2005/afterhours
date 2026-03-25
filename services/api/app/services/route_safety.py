@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
+from math import cos, floor, radians
 from typing import Any, TypedDict
 from uuid import UUID
 
@@ -31,6 +32,7 @@ from app.services.route_geometry import (
     route_length_metres,
     sample_route_points_by_distance,
 )
+
 
 class HeatmapCell(TypedDict, total=False):
     cell_id: str
@@ -171,6 +173,198 @@ def compute_report_density(
     return round(weighted_total / route_length_km, 4)
 
 
+def metres_per_latitude() -> float:
+    return 111320.0
+
+
+def metres_per_longitude(latitude: float) -> float:
+    return max(111320.0 * cos(radians(latitude)), 1e-6)
+
+
+def to_xy_metre_coordinates(
+    point: tuple[float, float],
+    *,
+    origin: tuple[float, float],
+) -> tuple[float, float]:
+    latitude, longitude = point
+    origin_latitude, origin_longitude = origin
+    x = (longitude - origin_longitude) * metres_per_longitude(origin_latitude)
+    y = (latitude - origin_latitude) * metres_per_latitude()
+    return x, y
+
+
+def to_latitude_longitude(
+    x: float,
+    y: float,
+    *,
+    origin: tuple[float, float],
+) -> tuple[float, float]:
+    origin_latitude, origin_longitude = origin
+    latitude = origin_latitude + (y / metres_per_latitude())
+    longitude = origin_longitude + (x / metres_per_longitude(origin_latitude))
+    return latitude, longitude
+
+
+def point_to_segment_distance(
+    point_xy: tuple[float, float],
+    segment_start_xy: tuple[float, float],
+    segment_end_xy: tuple[float, float],
+) -> float:
+    point_x, point_y = point_xy
+    start_x, start_y = segment_start_xy
+    end_x, end_y = segment_end_xy
+    segment_x = end_x - start_x
+    segment_y = end_y - start_y
+    point_start_x = point_x - start_x
+    point_start_y = point_y - start_y
+    segment_length_squared = (segment_x * segment_x) + (segment_y * segment_y)
+
+    if segment_length_squared == 0:
+        distance_x = point_x - start_x
+        distance_y = point_y - start_y
+        return (distance_x * distance_x + distance_y * distance_y) ** 0.5
+
+    closest_point_on_segment = (
+        (point_start_x * segment_x) + (point_start_y * segment_y)
+    ) / segment_length_squared
+    closest_point_on_segment = max(0.0, min(1.0, closest_point_on_segment))
+    closest_x = start_x + (closest_point_on_segment * segment_x)
+    closest_y = start_y + (closest_point_on_segment * segment_y)
+    distance_x = point_x - closest_x
+    distance_y = point_y - closest_y
+    return (distance_x * distance_x + distance_y * distance_y) ** 0.5
+
+
+def point_to_route_distance(
+    point: tuple[float, float],
+    *,
+    route_points: list[tuple[float, float]],
+) -> float:
+    if not route_points:
+        return float("inf")
+
+    origin = route_points[0]
+    point_xy = to_xy_metre_coordinates(point, origin=origin)
+
+    if len(route_points) == 1:
+        route_xy = to_xy_metre_coordinates(route_points[0], origin=origin)
+        distance_x = point_xy[0] - route_xy[0]
+        distance_y = point_xy[1] - route_xy[1]
+        return (distance_x * distance_x + distance_y * distance_y) ** 0.5
+
+    min_distance = float("inf")
+    for index in range(len(route_points) - 1):
+        start_xy = to_xy_metre_coordinates(route_points[index], origin=origin)
+        end_xy = to_xy_metre_coordinates(route_points[index + 1], origin=origin)
+        distance = point_to_segment_distance(point_xy, start_xy, end_xy)
+        if distance < min_distance:
+            min_distance = distance
+    return min_distance
+
+
+def build_heatmap_cells(
+    *,
+    crime_points: Iterable[dict[str, Any]],
+    route_points: list[tuple[float, float]],
+    corridor_half_width_metres: float,
+    cell_size_metres: float,
+) -> list[HeatmapCell]:
+    if not route_points or cell_size_metres <= 0:
+        return []
+
+    origin = route_points[0]
+    cells_data: dict[tuple[int, int], dict[str, float | int]] = {}
+
+    for point in crime_points:
+        latitude_raw = point.get("latitude")
+        longitude_raw = point.get("longitude")
+        if latitude_raw is None or longitude_raw is None:
+            continue
+
+        try:
+            latitude = float(latitude_raw)
+            longitude = float(longitude_raw)
+        except (TypeError, ValueError):
+            continue
+
+        distance_to_route = point_to_route_distance(
+            (latitude, longitude),
+            route_points=route_points,
+        )
+        if distance_to_route > corridor_half_width_metres:
+            continue
+
+        x_metres, y_metres = to_xy_metre_coordinates(
+            (latitude, longitude),
+            origin=origin,
+        )
+        row = floor(y_metres / cell_size_metres)
+        col = floor(x_metres / cell_size_metres)
+        cell_key = (row, col)
+
+        cell_data = cells_data.setdefault(
+            cell_key,
+            {
+                "risk_score": 0.0,
+                "source_count": 0,
+            },
+        )
+        cell_data["risk_score"] = float(cell_data["risk_score"]) + float(
+            get_crime_weight(point.get("category"))
+        )
+        cell_data["source_count"] = int(cell_data["source_count"]) + 1
+
+    heatmap_cells: list[HeatmapCell] = []
+    for (row, col), cell_data in cells_data.items():
+        min_x = col * cell_size_metres
+        max_x = (col + 1) * cell_size_metres
+        min_y = row * cell_size_metres
+        max_y = (row + 1) * cell_size_metres
+
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        center_latitude, center_longitude = to_latitude_longitude(
+            center_x,
+            center_y,
+            origin=origin,
+        )
+        min_latitude, min_longitude = to_latitude_longitude(
+            min_x,
+            min_y,
+            origin=origin,
+        )
+        max_latitude, max_longitude = to_latitude_longitude(
+            max_x,
+            max_y,
+            origin=origin,
+        )
+
+        heatmap_cells.append(
+            HeatmapCell(
+                cell_id=f"{row}:{col}",
+                center_latitude=round(center_latitude, 7),
+                center_longitude=round(center_longitude, 7),
+                risk_score=round(float(cell_data["risk_score"]), 2),
+                source_count=int(cell_data["source_count"]),
+                bounds={
+                    "min_latitude": round(min_latitude, 7),
+                    "min_longitude": round(min_longitude, 7),
+                    "max_latitude": round(max_latitude, 7),
+                    "max_longitude": round(max_longitude, 7),
+                },
+            )
+        )
+
+    heatmap_cells.sort(
+        key=lambda cell: (
+            float(cell["risk_score"]),
+            int(cell["source_count"]),
+        ),
+        reverse=True,
+    )
+    return heatmap_cells
+
+
 def _compute_incident_density(
     *,
     payload: RouteCrimeAggregationInput,
@@ -193,14 +387,26 @@ def compute_route_safety_metrics(
     payload: RouteCrimeAggregationInput,
 ) -> RouteSafetyMetrics:
     geometry = payload["route_geometry_geojson"]
-    points = iter_route_points(geometry)
-    length_metres = route_length_metres(points)
-    length_km = max(length_metres / 1000.0, 0.001)
-
     warnings = list(payload["route_crime_response"]["warnings"])
 
-    if length_metres <= 0:
-        warnings.append("invalid_route_geometry")
+    if not geometry:
+        route_points = []
+        length_metres = 0.0
+        length_km = 0.001
+        warnings.append("missing_route_geometry")
+    else:
+        try:
+            route_points = iter_route_points(geometry)
+        except ValueError:
+            route_points = []
+            length_metres = 0.0
+            length_km = 0.001
+            warnings.append("invalid_route_geometry")
+        else:
+            length_metres = route_length_metres(route_points)
+            length_km = max(length_metres / 1000.0, 0.001)
+            if length_metres <= 0:
+                warnings.append("invalid_route_geometry")
 
     incident_density = _compute_incident_density(
         payload=payload,
@@ -210,6 +416,13 @@ def compute_route_safety_metrics(
     if incident_density is None:
         warnings.append("no_crime_data_found")
 
+    heatmap_cells = build_heatmap_cells(
+        crime_points=payload["route_crime_response"]["points"],
+        route_points=route_points,
+        corridor_half_width_metres=payload["corridor_half_width_metres"],
+        cell_size_metres=payload["cell_size_metres"],
+    )
+
     return RouteSafetyMetrics(
         incident_density=incident_density,
         report_density=None,
@@ -218,7 +431,7 @@ def compute_route_safety_metrics(
         route_length_km=length_km,
         corridor_half_width_metres=payload["corridor_half_width_metres"],
         cell_size_metres=payload["cell_size_metres"],
-        heatmap_cells=[],
+        heatmap_cells=heatmap_cells,
     )
 
 
@@ -255,7 +468,7 @@ async def enrich_route_candidate_safety(
         )
     )
 
-    if db is None:
+    if db is None or not route_geometry_geojson:
         return metrics
 
     route_points = iter_route_points(route_geometry_geojson)
@@ -293,5 +506,5 @@ async def enrich_route_candidate_safety(
         route_length_km=metrics["route_length_km"],
         corridor_half_width_metres=metrics["corridor_half_width_metres"],
         cell_size_metres=metrics["cell_size_metres"],
-        heatmap_cells=[],
+        heatmap_cells=metrics["heatmap_cells"],
     )

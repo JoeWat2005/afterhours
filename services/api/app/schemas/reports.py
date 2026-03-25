@@ -1,7 +1,40 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+
+
+def _normalize_category_key(value: str) -> str:
+    normalized = value.strip().lower()
+    for token in ("/", "-", "_"):
+        normalized = normalized.replace(token, " ")
+    return " ".join(normalized.split())
+
+
+CANONICAL_CATEGORY_BY_ALIAS: dict[str, str] = {
+    "assault": "assault",
+    "robbery": "robbery",
+    "harassment": "harassment",
+    "theft": "theft",
+    "burglary": "theft",
+    "break in": "theft",
+    "break in burglary": "theft",
+    "suspicious activity": "suspicious activity",
+    "crime": "suspicious activity",
+    "unsafe area": "suspicious activity",
+    "poor lighting": "poor lighting",
+    "unsafe crossing": "unsafe crossing",
+    "hazard": "hazard",
+    "road hazard": "hazard",
+    "road hazard potholes": "hazard",
+    "pothole": "hazard",
+    "potholes": "hazard",
+    "anti social behaviour": "harassment",
+    "anti social behavior": "harassment",
+    "antisocial behaviour": "harassment",
+    "antisocial behavior": "harassment",
+    "other": "other",
+}
 
 from app.core.route_risk_config import ReportSeverity
 
@@ -23,8 +56,10 @@ class SafetyReportCreate(BaseModel):
     - longitude: Geographic longitude (-180 to 180)
     """
 
-    # ID of the user submitting the report
-    user_id: UUID
+    model_config = ConfigDict(extra="forbid")
+
+    # ID of the user submitting the report (optional/anonymous allowed)
+    user_id: UUID | None = None
 
     # User-facing category for the submitted report
     category: str = Field(min_length=1, max_length=64)
@@ -32,14 +67,24 @@ class SafetyReportCreate(BaseModel):
     # Short summary of the issue
     summary: str = Field(min_length=1, max_length=280)
 
-    # Detailed description of the issue
-    details: str = Field(min_length=1, max_length=2000)
+    # Detailed description of the issue (accept "description" alias for compatibility)
+    details: str = Field(
+        min_length=1,
+        max_length=2000,
+        validation_alias=AliasChoices("details", "description"),
+    )
 
     # Latitude coordinate (validated range)
     latitude: float = Field(ge=-90, le=90)
 
     # Longitude coordinate (validated range)
     longitude: float = Field(ge=-180, le=180)
+
+    @field_validator("category")
+    @classmethod
+    def normalize_category(cls, value: str) -> str:
+        normalized_key = _normalize_category_key(value)
+        return CANONICAL_CATEGORY_BY_ALIAS.get(normalized_key, "other")
 
 
 class SafetyReportResponse(BaseModel):
@@ -68,7 +113,7 @@ class SafetyReportResponse(BaseModel):
     id: UUID
 
     # User who submitted the report
-    user_id: UUID
+    user_id: UUID | None
 
     # User-facing report category
     category: str

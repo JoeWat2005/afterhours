@@ -1,8 +1,95 @@
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, SafeAreaView, ScrollView, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useUiPreferences } from "../src/providers/UIPreferences";
+import {
+  useUiPreferences,
+  type RouteAccessibilityChoices,
+  type RouteWaitingAreaChoices,
+} from "../src/providers/UIPreferences";
+
+const ACCESSIBILITY_SETTINGS: Array<{
+  icon: keyof typeof Ionicons.glyphMap;
+  key: keyof RouteAccessibilityChoices;
+  title: string;
+  description: string;
+}> = [
+  {
+    icon: "remove-circle-outline",
+    key: "avoid_stairs",
+    title: "Avoid stairs",
+    description: "Hard requirement for routes without stairs.",
+  },
+  {
+    icon: "walk-outline",
+    key: "step_free_access",
+    title: "Step-free access",
+    description: "Prioritise routes with step-free coverage.",
+  },
+  {
+    icon: "arrow-up-circle-outline",
+    key: "lifts_available",
+    title: "Lifts available",
+    description: "Prefer routes with lift coverage.",
+  },
+  {
+    icon: "triangle-outline",
+    key: "ramps_available",
+    title: "Ramps available",
+    description: "Prefer routes with ramp coverage.",
+  },
+  {
+    icon: "swap-vertical-outline",
+    key: "escalators_available",
+    title: "Escalators available",
+    description: "Prefer routes with escalator coverage.",
+  },
+];
+
+const WAITING_AREA_SETTINGS: Array<{
+  icon: keyof typeof Ionicons.glyphMap;
+  key: keyof RouteWaitingAreaChoices;
+  title: string;
+  description: string;
+}> = [
+  {
+    icon: "shield-checkmark-outline",
+    key: "safe_waiting_areas",
+    title: "Safe waiting areas",
+    description: "Prioritise routes with nearby safe places.",
+  },
+  {
+    icon: "sunny-outline",
+    key: "well_lit_waiting_areas",
+    title: "Well-lit waiting",
+    description: "Prefer waiting points with better lighting.",
+  },
+  {
+    icon: "wifi-outline",
+    key: "wifi_nearby",
+    title: "Wi-Fi nearby",
+    description: "Prefer routes near Wi-Fi access points.",
+  },
+  {
+    icon: "people-outline",
+    key: "staffed_venues_nearby",
+    title: "Staffed venues",
+    description: "Prefer nearby staffed locations.",
+  },
+  {
+    icon: "storefront-outline",
+    key: "open_venues_nearby",
+    title: "Open venues",
+    description: "Prefer routes near open venues.",
+  },
+  {
+    icon: "compass-outline",
+    key: "safe_areas_nearby",
+    title: "Safe-area coverage",
+    description: "Prefer waiting areas that overlap safer zones.",
+  },
+];
 
 function SettingRow({
   icon,
@@ -48,7 +135,17 @@ function SettingRow({
 }
 
 export default function SettingsScreen() {
-  const { highContrast, setHighContrast } = useUiPreferences();
+  const {
+    highContrast,
+    setHighContrast,
+    routeOptions,
+    setAccessibilityOption,
+    setWaitingAreaOption,
+    leaveNowAlerts,
+    setLeaveNowAlerts,
+    lowDataMode,
+    setLowDataMode,
+  } = useUiPreferences();
 
   return (
     <SafeAreaView className={`flex-1 ${highContrast ? "bg-slate-100" : "bg-slate-950"}`}>
@@ -77,12 +174,12 @@ export default function SettingsScreen() {
             Settings
           </Text>
           <Text className={`mt-3 text-base leading-7 ${highContrast ? "text-slate-700" : "text-slate-300"}`}>
-            Placeholder controls for accessibility, route behaviour, and alerts.
+            Route options map directly to backend route requirements and preferences.
           </Text>
 
           <View className={`mt-6 rounded-3xl border p-4 ${highContrast ? "border-black/10 bg-slate-50" : "border-cyan-400/15 bg-slate-900/80"}`}>
             <Text className={`text-xs font-bold uppercase tracking-[2px] ${highContrast ? "text-sky-700" : "text-cyan-300"}`}>
-              Accessibility
+              Interface
             </Text>
 
             <View className="mt-4">
@@ -94,45 +191,75 @@ export default function SettingsScreen() {
                 onValueChange={setHighContrast}
                 highContrast={highContrast}
               />
-              <SettingRow
-                icon="walk-outline"
-                title="Accessible routes"
-                description="Placeholder toggle for accessibility-aware route selection."
-                value={true}
-                onValueChange={() => {}}
-                highContrast={highContrast}
-              />
-              <SettingRow
-                icon="navigate-outline"
-                title="Landmark guidance"
-                description="Placeholder toggle for landmark-based guidance."
-                value={true}
-                onValueChange={() => {}}
-                highContrast={highContrast}
-              />
             </View>
           </View>
 
           <View className={`mt-4 rounded-3xl border p-4 ${highContrast ? "border-black/10 bg-slate-50" : "border-cyan-400/15 bg-slate-900/80"}`}>
             <Text className={`text-xs font-bold uppercase tracking-[2px] ${highContrast ? "text-sky-700" : "text-cyan-300"}`}>
-              Alerts and data
+              Route Accessibility
+            </Text>
+            <Text className={`mt-2 text-xs ${highContrast ? "text-slate-700" : "text-slate-400"}`}>
+              Sent as `requirements.accessibility` and `preferences.accessibility`.
+            </Text>
+
+            <View className="mt-4">
+              {ACCESSIBILITY_SETTINGS.map((setting) => (
+                <SettingRow
+                  key={setting.key}
+                  icon={setting.icon}
+                  title={setting.title}
+                  description={setting.description}
+                  value={routeOptions.accessibility[setting.key]}
+                  onValueChange={(value) => setAccessibilityOption(setting.key, value)}
+                  highContrast={highContrast}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View className={`mt-4 rounded-3xl border p-4 ${highContrast ? "border-black/10 bg-slate-50" : "border-cyan-400/15 bg-slate-900/80"}`}>
+            <Text className={`text-xs font-bold uppercase tracking-[2px] ${highContrast ? "text-sky-700" : "text-cyan-300"}`}>
+              Waiting Areas
+            </Text>
+            <Text className={`mt-2 text-xs ${highContrast ? "text-slate-700" : "text-slate-400"}`}>
+              Sent as `requirements.waiting_areas` and `preferences.waiting_areas`.
+            </Text>
+
+            <View className="mt-4">
+              {WAITING_AREA_SETTINGS.map((setting) => (
+                <SettingRow
+                  key={setting.key}
+                  icon={setting.icon}
+                  title={setting.title}
+                  description={setting.description}
+                  value={routeOptions.waiting_areas[setting.key]}
+                  onValueChange={(value) => setWaitingAreaOption(setting.key, value)}
+                  highContrast={highContrast}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View className={`mt-4 rounded-3xl border p-4 ${highContrast ? "border-black/10 bg-slate-50" : "border-cyan-400/15 bg-slate-900/80"}`}>
+            <Text className={`text-xs font-bold uppercase tracking-[2px] ${highContrast ? "text-sky-700" : "text-cyan-300"}`}>
+              Alerts and Data
             </Text>
 
             <View className="mt-4">
               <SettingRow
                 icon="notifications-outline"
                 title="Leave now alerts"
-                description="Placeholder toggle for late-night transport reminders."
-                value={true}
-                onValueChange={() => {}}
+                description="Enable transport reminder behaviours in the app."
+                value={leaveNowAlerts}
+                onValueChange={setLeaveNowAlerts}
                 highContrast={highContrast}
               />
               <SettingRow
                 icon="cellular-outline"
                 title="Low data mode"
-                description="Placeholder toggle for route caching and reduced data use."
-                value={false}
-                onValueChange={() => {}}
+                description="Request fewer route alternatives to reduce network usage."
+                value={lowDataMode}
+                onValueChange={setLowDataMode}
                 highContrast={highContrast}
               />
             </View>

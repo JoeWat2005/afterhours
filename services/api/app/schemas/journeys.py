@@ -1,79 +1,130 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+
+from app.schemas.routes import RankedRouteResult
+
+
+class JourneySelectedRoute(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    candidate_id: str | None = Field(default=None, min_length=1, max_length=64)
+    score: float
+    geometry_geojson: dict
 
 
 class JourneyCreate(BaseModel):
-    """
-    Schema for creating a new journey.
+    model_config = ConfigDict(extra="forbid")
 
-    Purpose:
-    - Validates incoming data when a client submits a journey.
-    - Ensures required fields and constraints are enforced.
-
-    Fields:
-    - user_id: Optional user associated with the journey
-    - origin_label: Human-readable starting point (1–128 chars)
-    - destination_label: Human-readable destination (1–128 chars)
-    - score: Safety score assigned to the route
-    - route_geojson: GeoJSON representation of the route path
-    """
-
-    # Optional user ID (can be anonymous journeys)
     user_id: UUID | None = None
-
-    # Starting location label (validated length)
     origin_label: str = Field(min_length=1, max_length=128)
-
-    # Destination label (validated length)
     destination_label: str = Field(min_length=1, max_length=128)
 
-    # Safety score for the journey
-    score: float
+    # New flow: select one route from RouteScoreResponse.ranked_routes.
+    selected_route: JourneySelectedRoute | None = None
+    selected_route_id: str | None = Field(default=None, min_length=1, max_length=64)
+    ranked_routes: list[RankedRouteResult] | None = None
 
-    # GeoJSON representing the route geometry
-    route_geojson: dict
+    # Backward-compatible direct payload shape.
+    score: float | None = None
+    route_geojson: dict | None = Field(
+        default=None,
+        validation_alias=AliasChoices("route_geojson", "geometry_geojson"),
+    )
+
+    @model_validator(mode="after")
+    def validate_payload_shape(self) -> "JourneyCreate":
+        if self.selected_route is not None:
+            if self.selected_route.geometry_geojson is None:
+                raise ValueError(
+                    "selected route must include geometry_geojson for persistence"
+                )
+            return self
+
+        has_selection_payload = (
+            self.selected_route_id is not None or self.ranked_routes is not None
+        )
+
+        if has_selection_payload:
+            if self.selected_route_id is None:
+                raise ValueError(
+                    "selected_route_id is required when ranked_routes is provided"
+                )
+            if not self.ranked_routes:
+                raise ValueError(
+                    "ranked_routes must include at least one route when "
+                    "selected_route_id is provided"
+                )
+
+            selected_route = self.get_selected_route()
+            if selected_route is None:
+                raise ValueError("selected_route_id was not found in ranked_routes")
+            if selected_route.geometry_geojson is None:
+                raise ValueError(
+                    "selected route must include geometry_geojson for persistence"
+                )
+            return self
+
+        if self.score is None:
+            raise ValueError(
+                "score is required when using the direct route payload shape"
+            )
+        if self.route_geojson is None:
+            raise ValueError(
+                "route_geojson (or geometry_geojson) is required when using the "
+                "direct route payload shape"
+            )
+
+        return self
+
+    def get_selected_route(self) -> RankedRouteResult | None:
+        if self.selected_route_id is None or not self.ranked_routes:
+            return None
+
+        return next(
+            (
+                route
+                for route in self.ranked_routes
+                if route.candidate_id == self.selected_route_id
+            ),
+            None,
+        )
+
+    def resolved_score(self) -> float:
+        if self.selected_route is not None:
+            return self.selected_route.score
+
+        selected_route = self.get_selected_route()
+        if selected_route is not None:
+            return selected_route.score
+        if self.score is None:
+            raise ValueError("score could not be resolved from payload")
+        return self.score
+
+    def resolved_route_geojson(self) -> dict:
+        if self.selected_route is not None:
+            if self.selected_route.geometry_geojson is None:
+                raise ValueError("selected route geometry is missing")
+            return self.selected_route.geometry_geojson
+
+        selected_route = self.get_selected_route()
+        if selected_route is not None:
+            if selected_route.geometry_geojson is None:
+                raise ValueError("selected route geometry is missing")
+            return selected_route.geometry_geojson
+        if self.route_geojson is None:
+            raise ValueError("route_geojson could not be resolved from payload")
+        return self.route_geojson
 
 
 class JourneyResponse(BaseModel):
-    """
-    Schema representing a journey returned in API responses.
-
-    Purpose:
-    - Standardises how journey data is returned to clients.
-    - Supports ORM-to-schema conversion using from_attributes.
-
-    Fields:
-    - id: Unique journey identifier
-    - user_id: Associated user (if any)
-    - origin_label: Starting location label
-    - destination_label: Destination label
-    - score: Safety score
-    - route_geojson: Route geometry in GeoJSON format
-    - created_at: Timestamp of creation
-    """
-
-    # Enable compatibility with ORM objects (e.g., SQLAlchemy models)
     model_config = ConfigDict(from_attributes=True)
 
-    # Unique identifier for the journey
     id: UUID
-
-    # Optional associated user
     user_id: UUID | None
-
-    # Starting location label
     origin_label: str
-
-    # Destination label
     destination_label: str
-
-    # Safety score
     score: float
-
-    # GeoJSON representation of the route
     route_geojson: dict
-
-    # Timestamp when the journey was created
     created_at: datetime
