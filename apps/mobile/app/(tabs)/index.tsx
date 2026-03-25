@@ -73,7 +73,7 @@ export default function HomeScreen() {
   const upsertReport = useMutation(api.reports.upsertReportFromApi);
   const reports = useQuery(
     api.reports.listReports,
-    isLoaded && isSignedIn && convexEnabled ? {} : "skip",
+    isLoaded && isSignedIn && convexEnabled && hasConvexToken ? {} : "skip",
   );
   const {
     session,
@@ -277,7 +277,7 @@ export default function HomeScreen() {
         },
       });
       setApiReports(nearby.items);
-      if (!convexEnabled) {
+      if (!convexEnabled || !hasConvexToken) {
         return;
       }
       for (const report of nearby.items) {

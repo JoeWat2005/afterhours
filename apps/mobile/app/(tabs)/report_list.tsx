@@ -49,7 +49,7 @@ export default function ReportsListScreen() {
   const convexEnabled = Boolean(env.convexUrl);
   const reports = useQuery(
     api.reports.listReports,
-    isLoaded && isSignedIn && convexEnabled ? {} : "skip",
+    isLoaded && isSignedIn && convexEnabled && hasConvexToken ? {} : "skip",
   );
   const upsertReport = useMutation(api.reports.upsertReportFromApi);
   const { setMapFocusTarget } = useRouteSession();
@@ -137,7 +137,7 @@ export default function ReportsListScreen() {
         },
       });
       setBackendReports(nearby.items);
-      if (!convexEnabled) {
+      if (!convexEnabled || !hasConvexToken) {
         return;
       }
       for (const report of nearby.items) {
