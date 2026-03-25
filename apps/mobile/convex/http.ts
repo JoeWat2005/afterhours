@@ -14,13 +14,15 @@ http.route({
       const { id, email_addresses, first_name, last_name } = payload.data;
 
       await ctx.runMutation(api.users.createUser, {
-        clerkId: id,
+        clerkId: id, //what if id doubled?
         email: email_addresses[0]?.email_address ?? "",
-        name: `${first_name ?? ""} ${last_name ?? ""}`.trim(),
+        name: `${first_name ?? ""} ${last_name ?? ""}`.trim() || "User unknown", //user unkown is for missing names
       });
+    } else {
+      console.log("Unhanled event:", payload.type); //stops from always 200
     }
 
-    return new Response(null, { status: 200 });
+    return new Response(null, { status: 200 }); //this only ever returns HTTP 200
   }),
 });
 
