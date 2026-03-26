@@ -13,6 +13,7 @@
     "convex:deploy": "convex deploy"
   },
   "dependencies": {
+    "@babel/runtime": "^7.29.2",
     "@clerk/expo": "^3.1.4",
     "@rnmapbox/maps": "^10.2.10",
     "convex": "^1.32.0",
@@ -37,7 +38,7 @@
     "react-native-screens": "~4.23.0",
     "react-native-web": "^0.21.0",
     "semver": "^6.3.1",
-    "tailwindcss": "^4.2.1"
+    "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
     "@types/react": "~19.2.14",
