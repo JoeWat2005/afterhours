@@ -1,5 +1,8 @@
 {
   "android": {
     "package": "com.iamoks.algorithmavengers"
+  },
+  "ios": {
+    "bundleIdentifier": "com.iamoks.algorithmavengers"
   }
 }

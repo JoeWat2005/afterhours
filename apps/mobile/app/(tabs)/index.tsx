@@ -439,7 +439,7 @@ export default function HomeScreen() {
       zoomLevel: 14,
       animationDuration: 700,
     });
-    setMapFocusTarget(null);
+    setMapFocusTarget(null); //should i change the timing?
   }, [mapFocusTarget, setMapFocusTarget]);
 
   useEffect(() => {
