@@ -32,3 +32,57 @@ def test_estimator_lowers_shrinkage_with_high_evidence() -> None:
     assert result["shrinkage_factor"] < 0.5
 
 
+
+def test_lighting_modifier_affects_score() -> None:
+    # Base scenario
+    base = estimate_route_safety(
+        incident_density=2.0,
+        report_density=1.0,
+        route_length_km=1.0,
+        lighting_score=None,
+        depart_hour=14,  # daytime
+    )
+
+    # Well lit route
+    well_lit = estimate_route_safety(
+        incident_density=2.0,
+        report_density=1.0,
+        route_length_km=1.0,
+        lighting_score=0.9,
+        depart_hour=14,
+    )
+
+    # Poorly lit route
+    poorly_lit = estimate_route_safety(
+        incident_density=2.0,
+        report_density=1.0,
+        route_length_km=1.0,
+        lighting_score=0.1,
+        depart_hour=14,
+    )
+
+    assert well_lit["safety_score"] > poorly_lit["safety_score"]
+    assert well_lit["expected_harm_rate"] < poorly_lit["expected_harm_rate"]
+
+
+def test_time_multiplier_increases_risk_at_night() -> None:
+    day_result = estimate_route_safety(
+        incident_density=1.0,
+        report_density=0.0,
+        route_length_km=2.0,
+        lighting_score=0.5,
+        depart_hour=14,  # 2 PM
+    )
+
+    night_result = estimate_route_safety(
+        incident_density=1.0,
+        report_density=0.0,
+        route_length_km=2.0,
+        lighting_score=0.5,
+        depart_hour=2,   # 2 AM
+    )
+
+    # Nighttime multiplier should increase harm and lower safety score
+    assert night_result["safety_score"] < day_result["safety_score"]
+    assert night_result["expected_harm_rate"] > day_result["expected_harm_rate"]
+
