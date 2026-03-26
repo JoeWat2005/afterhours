@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
@@ -11,7 +11,7 @@ import Mapbox from "@rnmapbox/maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "../../convex/_generated/api";
-import { mapCanonicalToConvexCategory } from "../../src/features/reports/categories";
+import { mapCanonicalToConvexCategory, mapUiIssueToCategories } from "../../src/features/reports/categories";
 import {
   BIRMINGHAM_DEFAULT_CENTER,
   apiRequest,
@@ -25,6 +25,7 @@ import {
   type NearbyReportsResponse,
   type RoutePlanResponse,
   type RoutePlanRequest,
+  type SafetyReportResponse,
 } from "../../src/lib/api";
 import {
   computeRouteProgress,
@@ -45,6 +46,17 @@ const OFF_ROUTE_THRESHOLD_METRES = 45;
 const OFF_ROUTE_SAMPLE_LIMIT = 3;
 const HEATMAP_RADIUS_METRES = 2500;
 const HEATMAP_CELL_SIZE_METRES = 180;
+
+const ISSUE_OPTIONS = [
+  "Crime",
+  "Break-in / Burglary",
+  "Harassment",
+  "Unsafe Area",
+  "Poor Lighting",
+  "Road Hazard / Potholes",
+  "Anti-social Behaviour",
+  "Other",
+];
 
 type PermissionState = "idle" | "granted" | "denied";
 
@@ -71,6 +83,7 @@ export default function HomeScreen() {
   const { hasConvexToken, checked: convexTokenChecked } = useConvexTokenAvailability();
   const convexEnabled = Boolean(env.convexUrl);
   const upsertReport = useMutation(api.reports.upsertReportFromApi);
+  const createRealtimeReport = useMutation(api.reports.createReport);
   const reports = useQuery(
     api.reports.listReports,
     isLoaded && isSignedIn && convexEnabled && hasConvexToken ? {} : "skip",
@@ -121,6 +134,90 @@ export default function HomeScreen() {
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 4000) as unknown as number;
+  }
+
+  // report mode
+  const [reportMode, setReportMode] = useState(false);
+  const [reportIssue, setReportIssue] = useState<string | null>(null);
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportLocation, setReportLocation] = useState<Coordinates | null>(null);
+  const [reportPickingLocation, setReportPickingLocation] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  function openReportMode() {
+    setReportMode(true);
+    setReportIssue(null);
+    setReportDescription("");
+    setReportLocation(null);
+    setReportPickingLocation(false);
+  }
+
+  function closeReportMode() {
+    setReportMode(false);
+    setReportPickingLocation(false);
+  }
+
+  function handleMapPress(event: { geometry: { coordinates: [number, number] } }) {
+    if (!reportPickingLocation) return;
+    const [lng, lat] = event.geometry.coordinates;
+    setReportLocation({ latitude: lat, longitude: lng });
+    setReportPickingLocation(false);
+  }
+
+  async function submitReport() {
+    if (reportSubmitting) return;
+    if (!reportIssue) {
+      showToast("Pick an issue type");
+      return;
+    }
+    if (reportDescription.trim().length < 12) {
+      showToast("Description needs to be a bit longer");
+      return;
+    }
+
+    const coords = reportLocation ?? currentLocation;
+    if (!coords) {
+      showToast("Still getting your location, try again");
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      const mapped = mapUiIssueToCategories(reportIssue);
+      const summary = `${reportIssue} near ${areaName}`.slice(0, 280);
+
+      const saved = await apiRequest<SafetyReportResponse>("/reports", getToken, {
+        method: "POST",
+        body: {
+          category: mapped.canonical,
+          summary,
+          details: reportDescription.trim(),
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+      });
+
+      try {
+        await createRealtimeReport({
+          apiReportId: saved.id,
+          latitude: saved.latitude,
+          longitude: saved.longitude,
+          category: mapped.convex,
+          description: saved.summary,
+          location: `${areaName} (${saved.latitude.toFixed(5)}, ${saved.longitude.toFixed(5)})`,
+        });
+      } catch {
+        // convex mirror is optional
+      }
+
+      showToast("Report submitted, cheers");
+      closeReportMode();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to submit report";
+      showToast(msg);
+    } finally {
+      setReportSubmitting(false);
+    }
   }
 
   const previewRoute = routePreview
@@ -637,6 +734,7 @@ export default function HomeScreen() {
           scaleBarEnabled={false}
           compassEnabled={false}
           onMapIdle={handleMapIdle}
+          onPress={(e: any) => handleMapPress(e)}
         >
           <Mapbox.Camera
             ref={mapCameraRef}
@@ -785,6 +883,15 @@ export default function HomeScreen() {
               <View className="h-4 w-4 rounded-full bg-blue-500 border border-white" />
             </Mapbox.PointAnnotation>
           ) : null}
+
+          {reportMode && reportLocation ? (
+            <Mapbox.PointAnnotation
+              id="report-pin"
+              coordinate={[reportLocation.longitude, reportLocation.latitude]}
+            >
+              <View className="h-4 w-4 rounded-full bg-amber-500 border-2 border-white" />
+            </Mapbox.PointAnnotation>
+          ) : null}
         </Mapbox.MapView>
       ) : (
         <View className="flex-1 items-center justify-center px-6">
@@ -900,6 +1007,98 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </>
+        ) : reportMode ? (
+          <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className={`font-bold ${theme.primaryText}`}>Report an issue</Text>
+              <Pressable onPress={closeReportMode}>
+                <Ionicons name="close" size={22} color={highContrast ? "#0f172a" : "#94a3b8"} />
+              </Pressable>
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>What happened?</Text>
+            <View className="flex-row flex-wrap mb-3">
+              {ISSUE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => setReportIssue(option)}
+                  className={`rounded-full border px-3 py-1.5 mr-2 mb-2 ${
+                    reportIssue === option
+                      ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                      : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                  }`}
+                >
+                  <Text className={`text-xs font-semibold ${
+                    reportIssue === option ? "text-white" : theme.primaryText
+                  }`}>
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>Description</Text>
+            <View
+              className={`rounded-xl border px-3 py-2 mb-3 ${
+                highContrast ? "bg-white border-slate-300" : "bg-slate-800/60 border-slate-700/40"
+              }`}
+            >
+              <TextInput
+                value={reportDescription}
+                onChangeText={setReportDescription}
+                placeholder="Please describe what happened"
+                placeholderTextColor={highContrast ? "#94a3b8" : "#64748b"}
+                className={theme.primaryText}
+                multiline
+                style={{ minHeight: 60, textAlignVertical: "top" }}
+              />
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>Location</Text>
+            <View className="flex-row mb-3">
+              <Pressable
+                onPress={() => {
+                  setReportLocation(null);
+                  setReportPickingLocation(false);
+                }}
+                className={`flex-1 mr-2 rounded-xl py-2 items-center border ${
+                  !reportLocation && !reportPickingLocation
+                    ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                    : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                }`}
+              >
+                <Text className={`text-xs font-semibold ${
+                  !reportLocation && !reportPickingLocation ? "text-white" : theme.primaryText
+                }`}>
+                  My location
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setReportPickingLocation(true)}
+                className={`flex-1 ml-2 rounded-xl py-2 items-center border ${
+                  reportPickingLocation || reportLocation
+                    ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                    : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                }`}
+              >
+                <Text className={`text-xs font-semibold ${
+                  reportPickingLocation || reportLocation ? "text-white" : theme.primaryText
+                }`}>
+                  {reportPickingLocation ? "Tap the map..." : reportLocation ? "Map pin set" : "Pick on map"}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={submitReport}
+              disabled={reportSubmitting}
+              className={`rounded-xl py-3 items-center ${reportSubmitting ? "bg-slate-400" : highContrast ? "bg-slate-900" : "bg-cyan-500"}`}
+            >
+              <Text className="text-white font-bold">
+                {reportSubmitting ? "Submitting..." : "Submit report"}
+              </Text>
+            </Pressable>
+          </ScrollView>
         ) : routePreview && previewRoute ? (
           <>
             <Text className={`font-bold ${theme.primaryText}`}>
@@ -982,7 +1181,7 @@ export default function HomeScreen() {
             ) : null}
           </>
         )}
-        {!session && !routePreview ? (
+        {!session && !routePreview && !reportMode ? (
           <View className="flex-row justify-between mt-3">
             <Pressable
               onPress={() => router.push("/(tabs)/services")}
@@ -1007,7 +1206,7 @@ export default function HomeScreen() {
               <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>Plan route</Text>
             </Pressable>
             <Pressable
-              onPress={() => router.push("/(tabs)/report")}
+              onPress={openReportMode}
               className="items-center flex-1"
             >
               <View className={`h-11 w-11 rounded-full items-center justify-center ${
