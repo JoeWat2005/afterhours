@@ -109,6 +109,8 @@ export default function HomeScreen() {
   const [syncingHeatmap, setSyncingHeatmap] = useState(false);
   const [apiReports, setApiReports] = useState<NearbyReportsResponse["items"]>([]);
   const [heatmapEnabled, setHeatmapEnabled] = useState(true);
+  const [showCrimePins, setShowCrimePins] = useState(false);
+  const [showReportPins, setShowReportPins] = useState(true);
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
   const [heatmapData, setHeatmapData] = useState<HeatmapResponse | null>(null);
   const mapCameraRef = useRef<Mapbox.Camera>(null);
@@ -220,20 +222,27 @@ export default function HomeScreen() {
     }
   }
 
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
+
   const previewRoute = routePreview
     ? routePreview.plan.ranked_routes.find(
-        (r) => r.candidate_id === routePreview.plan.selected_route_id,
+        (r) => r.candidate_id === (selectedPreviewId ?? routePreview.plan.selected_route_id),
       ) ?? routePreview.plan.ranked_routes[0]
     : null;
 
-  const previewShape = useMemo(() => {
-    if (!previewRoute?.geometry_geojson) return null;
-    return {
-      type: "Feature" as const,
-      properties: {},
-      geometry: previewRoute.geometry_geojson,
-    };
-  }, [previewRoute?.geometry_geojson]);
+  const previewRouteShapes = useMemo(() => {
+    if (!routePreview) return [];
+    return routePreview.plan.ranked_routes
+      .filter((r) => r.geometry_geojson)
+      .map((r) => ({
+        id: r.candidate_id,
+        shape: {
+          type: "Feature" as const,
+          properties: {},
+          geometry: r.geometry_geojson!,
+        },
+      }));
+  }, [routePreview]);
 
   function handleSearchChange(text: string) {
     setSearchText(text);
@@ -285,6 +294,7 @@ export default function HomeScreen() {
         },
       });
       setRoutePreview({ plan, origin, destination });
+      setSelectedPreviewId(plan.selected_route_id);
 
       mapCameraRef.current?.fitBounds(
         [destination.longitude, destination.latitude],
@@ -339,6 +349,7 @@ export default function HomeScreen() {
 
   function cancelRoutePreview() {
     setRoutePreview(null);
+    setSelectedPreviewId(null);
   }
 
   const theme = {
@@ -436,6 +447,26 @@ export default function HomeScreen() {
       })),
     };
   }, [heatmapData]);
+
+  const crimePinFeatures = useMemo(() => {
+    if (!heatmapData?.crime_pins?.length) {
+      return { type: "FeatureCollection" as const, features: [] };
+    }
+    return {
+      type: "FeatureCollection" as const,
+      features: heatmapData.crime_pins.map((pin) => ({
+        type: "Feature" as const,
+        properties: {
+          category: pin.category,
+          month: pin.month,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [pin.longitude, pin.latitude],
+        },
+      })),
+    };
+  }, [heatmapData?.crime_pins]);
 
   async function startLocationTracking() {
     setLocationError(null);
@@ -813,18 +844,35 @@ export default function HomeScreen() {
             </Mapbox.ShapeSource>
           ) : null}
 
-          <Mapbox.ShapeSource id="reports-source" shape={reportFeatures}>
-            <Mapbox.CircleLayer
-              id="report-points"
-              style={{
-                circleRadius: 5,
-                circleColor: highContrast ? "#b91c1c" : "#f43f5e",
-                circleStrokeColor: "#ffffff",
-                circleStrokeWidth: 1,
-                circleOpacity: 0.85,
-              }}
-            />
-          </Mapbox.ShapeSource>
+          {showReportPins ? (
+            <Mapbox.ShapeSource id="reports-source" shape={reportFeatures}>
+              <Mapbox.CircleLayer
+                id="report-points"
+                style={{
+                  circleRadius: 5,
+                  circleColor: highContrast ? "#b91c1c" : "#f43f5e",
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 1,
+                  circleOpacity: 0.85,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          ) : null}
+
+          {showCrimePins ? (
+            <Mapbox.ShapeSource id="crime-pins-source" shape={crimePinFeatures}>
+              <Mapbox.CircleLayer
+                id="crime-pin-points"
+                style={{
+                  circleRadius: 4,
+                  circleColor: highContrast ? "#1d4ed8" : "#60a5fa",
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 1,
+                  circleOpacity: 0.8,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          ) : null}
 
           {session ? (
             <>
@@ -843,19 +891,25 @@ export default function HomeScreen() {
             </>
           ) : null}
 
-          {!session && previewShape ? (
+          {!session && previewRouteShapes.length > 0 ? (
             <>
-              <Mapbox.ShapeSource id="preview-route-source" shape={previewShape}>
-                <Mapbox.LineLayer
-                  id="preview-route-line"
-                  style={{
-                    lineColor: highContrast ? "#0f172a" : "#22d3ee",
-                    lineWidth: 4,
-                    lineOpacity: 0.8,
-                    lineDasharray: [2, 1],
-                  }}
-                />
-              </Mapbox.ShapeSource>
+              {previewRouteShapes.map((route) => {
+                const isSelected = route.id === (selectedPreviewId ?? routePreview?.plan.selected_route_id);
+                return (
+                  <Mapbox.ShapeSource key={route.id} id={`preview-${route.id}`} shape={route.shape}>
+                    <Mapbox.LineLayer
+                      id={`preview-line-${route.id}`}
+                      style={{
+                        lineColor: isSelected
+                          ? (highContrast ? "#0f172a" : "#22d3ee")
+                          : (highContrast ? "#94a3b8" : "#64748b"),
+                        lineWidth: isSelected ? 5 : 3,
+                        lineOpacity: isSelected ? 0.9 : 0.4,
+                      }}
+                    />
+                  </Mapbox.ShapeSource>
+                );
+              })}
               {routePreview ? (
                 <>
                   <Mapbox.PointAnnotation
@@ -917,20 +971,50 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <Pressable
-          onPress={() => setHeatmapEnabled((prev) => !prev)}
-          className={`absolute left-4 h-10 w-10 items-center justify-center rounded-full ${
-            heatmapEnabled
-              ? "bg-cyan-500"
-              : highContrast ? "bg-white/90" : "bg-slate-900/70"
-          }`}
-        >
-          <Ionicons
-            name="flame"
-            size={20}
-            color={heatmapEnabled ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
-          />
-        </Pressable>
+        <View className="absolute left-4">
+          <Pressable
+            onPress={() => setHeatmapEnabled((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full mb-2 ${
+              heatmapEnabled
+                ? "bg-cyan-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
+          >
+            <Ionicons
+              name="flame"
+              size={20}
+              color={heatmapEnabled ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => setShowCrimePins((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full mb-2 ${
+              showCrimePins
+                ? "bg-blue-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
+          >
+            <Ionicons
+              name="shield-outline"
+              size={18}
+              color={showCrimePins ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => setShowReportPins((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full ${
+              showReportPins
+                ? "bg-rose-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
+          >
+            <Ionicons
+              name="flag-outline"
+              size={18}
+              color={showReportPins ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
+          </Pressable>
+        </View>
 
         <View className="absolute right-4 flex-row">
           <Link href="/profile" asChild>
@@ -1104,14 +1188,37 @@ export default function HomeScreen() {
             <Text className={`font-bold ${theme.primaryText}`}>
               {routePreview.destination.label ?? "Destination"}
             </Text>
-            <Text className={`text-xs mt-1 ${theme.secondaryText}`}>
-              {formatDistanceMetres(previewRoute.distance_metres)} | {Math.max(1, Math.round(previewRoute.duration_seconds / 60))} min walk
-            </Text>
-            <Text className={`text-xs mt-1 ${theme.secondaryText}`}>
-              Safety score: {Math.round(previewRoute.score)}%
-            </Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2 -mx-1">
+              {routePreview.plan.ranked_routes.map((route) => {
+                const isSelected = route.candidate_id === (selectedPreviewId ?? routePreview.plan.selected_route_id);
+                return (
+                  <Pressable
+                    key={route.candidate_id}
+                    onPress={() => setSelectedPreviewId(route.candidate_id)}
+                    className={`rounded-xl border px-3 py-2 mr-2 ${
+                      isSelected
+                        ? highContrast ? "border-slate-900 bg-slate-100" : "border-cyan-400/60 bg-cyan-500/10"
+                        : highContrast ? "border-slate-200 bg-white" : "border-slate-700/40 bg-slate-800/40"
+                    }`}
+                    style={{ minWidth: 140 }}
+                  >
+                    <Text className={`text-xs font-bold ${theme.primaryText}`}>
+                      {route.label ?? `Route ${route.rank}`}
+                    </Text>
+                    <Text className={`text-[10px] mt-0.5 ${theme.secondaryText}`}>
+                      {formatDistanceMetres(route.distance_metres)} | {Math.max(1, Math.round(route.duration_seconds / 60))} min
+                    </Text>
+                    <Text className={`text-[10px] mt-0.5 ${theme.secondaryText}`}>
+                      Safety: {Math.round(route.score)}%
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
             {previewRoute.explanation?.summary ? (
-              <Text className={`text-xs mt-1 ${theme.secondaryText}`} numberOfLines={2}>
+              <Text className={`text-xs mt-2 ${theme.secondaryText}`} numberOfLines={2}>
                 {previewRoute.explanation.summary}
               </Text>
             ) : null}

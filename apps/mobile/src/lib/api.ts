@@ -367,6 +367,15 @@ export type HeatmapCell = {
   bounds: HeatmapCellBounds;
 };
 
+export type CrimePin = {
+  crime_id: string;
+  category: string;
+  month: string;
+  latitude: number;
+  longitude: number;
+  location_label: string | null;
+};
+
 export type HeatmapResponse = {
   latitude: number;
   longitude: number;
@@ -375,6 +384,7 @@ export type HeatmapResponse = {
   category: string;
   date: string | null;
   items: HeatmapCell[];
+  crime_pins: CrimePin[];
 };
 
 export type AutocompleteResult = {
