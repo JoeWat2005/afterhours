@@ -13,7 +13,8 @@ import {
   type NearbyServicesResponse,
   type ServiceCategory,
 } from "../../src/lib/api";
-import { useRouteSession } from "../../src/features/route/routeSession";
+// Previous flow reference:
+// import { useRouteSession } from "../../src/features/route/routeSession";
 import { useUiPreferences } from "../../src/providers/UIPreferences";
 
 type CategoryOption = {
@@ -32,7 +33,8 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
 export default function ServicesScreen() {
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
-  const { setMapFocusTarget } = useRouteSession();
+  // Previous flow reference:
+  // const { setMapFocusTarget } = useRouteSession();
   const { highContrast } = useUiPreferences();
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | "all">(
     "all",
@@ -203,16 +205,26 @@ export default function ServicesScreen() {
 
             <Pressable
               onPress={() => {
-                setMapFocusTarget({
-                  latitude: item.latitude,
-                  longitude: item.longitude,
-                  label: item.name,
+                // Previous map-focus flow (kept for reference):
+                // setMapFocusTarget({
+                //   latitude: item.latitude,
+                //   longitude: item.longitude,
+                //   label: item.name,
+                // });
+                // router.push("/(tabs)");
+
+                const destinationQuery = item.address
+                  ? `${item.name}, ${item.address}`
+                  : item.name;
+
+                router.push({
+                  pathname: "/(tabs)/route",
+                  params: { destination: destinationQuery },
                 });
-                router.push("/(tabs)");
               }}
               className="mt-3 self-start rounded-xl bg-slate-900 px-3 py-2"
             >
-              <Text className="text-white text-xs font-bold">Focus on map</Text>
+              <Text className="text-white text-xs font-bold">Get route</Text>
             </Pressable>
           </View>
         )}
