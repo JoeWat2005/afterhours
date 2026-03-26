@@ -14,6 +14,7 @@ def test_validate_report_accepts_valid_payload() -> None:
     assert result == {
         "accepted": True,
         "moderation_flags": [],
+        "severity": "low",
     }
 
 
