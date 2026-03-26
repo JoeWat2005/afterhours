@@ -439,7 +439,12 @@ export default function HomeScreen() {
       zoomLevel: 14,
       animationDuration: 700,
     });
-    setMapFocusTarget(null); //should i change the timing?
+    //.sleep()
+    const sleep = setTimeout(() => {
+      setMapFocusTarget(null);
+    }, 750); //gives time to reload
+
+    return () => clearTimeout(sleep);
   }, [mapFocusTarget, setMapFocusTarget]);
 
   useEffect(() => {
