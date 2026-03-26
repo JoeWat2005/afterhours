@@ -10,9 +10,9 @@ async function getAuth(ctx: any) {
 export const listRecentJourneys = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await getAuth(ctx);
+    const identity = await getAuth(ctx); //eroor here!
 
-    return await ctx.db.query("journeys").order("desc").take(10);
+    return await ctx.db.query("journeys").withIndex("by_user", q => q.eq("userId", identity.subject)).order("desc").take(10);
   }
 });
 
@@ -45,7 +45,7 @@ export const editJourney = mutation({
     },
 
     handler: async (ctx, args) => {
-      const identity = getAuth(ctx);
+      const identity = await getAuth(ctx);
     } //tbc
 });
 
