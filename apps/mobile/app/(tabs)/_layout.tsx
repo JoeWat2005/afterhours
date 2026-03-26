@@ -26,6 +26,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Map",
+          tabBarStyle: { display: "none" },
           tabBarIcon: ({ color }) => (
             <Ionicons name="map-outline" size={26} color={color} />
           ),
