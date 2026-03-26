@@ -147,6 +147,7 @@ def _patch_geometry_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
             id=report.id,
             user_id=report.user_id,
             category=report.category,
+            severity=report.severity,
             summary=report.summary,
             details=report.details,
             latitude=float(report.latitude),
