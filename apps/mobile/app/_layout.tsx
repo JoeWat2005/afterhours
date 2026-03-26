@@ -1,6 +1,7 @@
 import "../global.css";
 import { useState } from "react";
 import { ClerkProvider, useAuth, useSignIn } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import { Slot, useRouter } from "expo-router";
 import { View, Text, TextInput, Pressable, ActivityIndicator, LogBox } from "react-native";
 import { AppProviders } from "../src/providers/AppProviders";
@@ -110,7 +111,7 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <ClerkProvider publishableKey={publishableKey}>
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <AppProviders>
         <RootNavigator />
       </AppProviders>

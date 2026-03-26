@@ -114,6 +114,14 @@ export default function HomeScreen() {
   const [planningRoute, setPlanningRoute] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [startingWalk, setStartingWalk] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000) as unknown as number;
+  }
 
   const previewRoute = routePreview
     ? routePreview.plan.ranked_routes.find(
@@ -190,6 +198,7 @@ export default function HomeScreen() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Route planning failed";
       setPlanError(msg);
+      showToast(msg);
       logPrototypeEvent("route_preview_failed", { error: msg });
     } finally {
       setPlanningRoute(false);
@@ -429,6 +438,7 @@ export default function HomeScreen() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "report sync failed";
+      showToast("Reports: " + message);
       logPrototypeEvent("report_reconciliation_failed", { error: message });
     } finally {
       setSyncingReports(false);
@@ -456,6 +466,7 @@ export default function HomeScreen() {
       const message =
         error instanceof Error ? error.message : "Heatmap sync failed";
       setHeatmapError(message);
+      showToast("Heatmap: " + message);
       logPrototypeEvent("heatmap_sync_failed", { error: message });
     } finally {
       setSyncingHeatmap(false);
@@ -831,6 +842,17 @@ export default function HomeScreen() {
           </Link>
         </View>
       </View>
+
+      {toast ? (
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="absolute left-4 right-4 rounded-xl bg-red-500/90 px-4 py-3"
+          style={{ top: insets.top + 52 }}
+        >
+          <Text className="text-white text-xs font-semibold">{toast}</Text>
+        </Animated.View>
+      ) : null}
 
       <Animated.View
         layout={LinearTransition.duration(250)}

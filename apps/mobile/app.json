@@ -17,7 +17,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "uk.ac.bham.afterhours"
+      "bundleIdentifier": "uk.ac.bham.afterhours",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "package": "uk.ac.bham.afterhours",
