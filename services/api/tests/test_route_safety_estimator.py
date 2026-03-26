@@ -86,3 +86,24 @@ def test_time_multiplier_increases_risk_at_night() -> None:
     assert night_result["safety_score"] < day_result["safety_score"]
     assert night_result["expected_harm_rate"] > day_result["expected_harm_rate"]
 
+
+def test_high_density_lowers_safety_score() -> None:
+    low_crime = estimate_route_safety(
+        incident_density=0.1,
+        report_density=0.0,
+        route_length_km=1.0,
+        lighting_score=0.8,
+        depart_hour=14,
+    )
+
+    high_crime = estimate_route_safety(
+        incident_density=50.0,
+        report_density=10.0,
+        route_length_km=1.0,
+        lighting_score=0.8,
+        depart_hour=14,
+    )
+
+    assert high_crime["safety_score"] < low_crime["safety_score"]
+    assert high_crime["expected_harm_rate"] > low_crime["expected_harm_rate"]
+    assert high_crime["serious_incident_probability"] > low_crime["serious_incident_probability"]
