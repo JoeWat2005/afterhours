@@ -126,6 +126,12 @@ export default function ReportScreen() {
       return;
     }
 
+    //change here
+    const saveInfo = { issueType, description, area, latitude, longitude };
+
+    //optimistic adding
+    router.push("/(tabs)/report_list");
+
     setSubmitting(true);
     try {
       const coords = await resolveCoordinates();
@@ -192,6 +198,13 @@ export default function ReportScreen() {
       const message =
         submitError instanceof Error ? submitError.message : "Failed to submit report.";
       logPrototypeEvent("report_submit_failed", { error: message });
+      //reset error stuff
+      //setBlah(saveInfo.Blah);
+      setIssueType(saveInfo.issueType);
+      setDescription(saveInfo.description);
+      setArea(saveInfo.area);
+      setLatitude(saveInfo.latitude);
+      setLongitude(saveInfo.longitude);
       setError(message);
     } finally {
       setSubmitting(false);
