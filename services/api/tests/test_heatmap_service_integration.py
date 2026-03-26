@@ -216,3 +216,33 @@ async def test_heatmap_cache_key_rounds_nearby_coordinates(monkeypatch: pytest.M
     )
 
     assert calls["fetch"] == 2
+
+
+def test_prune_cache_removes_expired_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Directly inject entries into the cache dict and confirm _prune_cache evicts
+    # the ones whose expiry timestamp is in the past.
+    cache = heatmap_service._cache
+
+    stub_result = heatmap_service.HeatmapResult(
+        latitude=51.5,
+        longitude=-0.12,
+        radius_metres=1000,
+        cell_size_metres=250,
+        category="all-crime",
+        date="2026-02",
+        items=[],
+    )
+
+    now = 2000.0
+    cache["expired-a"] = (1000.0, stub_result)   # expired: expires_at < now
+    cache["expired-b"] = (1999.9, stub_result)   # expired: expires_at < now
+    cache["live-a"] = (2001.0, stub_result)      # still valid
+    cache["live-b"] = (9999.0, stub_result)      # still valid
+
+    heatmap_service._prune_cache(now)
+
+    assert "expired-a" not in cache
+    assert "expired-b" not in cache
+    assert "live-a" in cache
+    assert "live-b" in cache
+
