@@ -147,15 +147,6 @@ export type GeocodeResult = {
   longitude: number;
 };
 
-type MapboxFeature = {
-  place_name?: string;
-  center?: [number, number];
-};
-
-type MapboxGeocodeResponse = {
-  features?: MapboxFeature[];
-};
-
 export async function geocodePlace(
   query: string,
   options?: {
@@ -166,25 +157,17 @@ export async function geocodePlace(
 ): Promise<GeocodeResult[]> {
   const token = env.mapboxAccessToken;
   if (!token) return [];
-  const cleanedQuery = query.trim();
-  if (!cleanedQuery) return [];
+  const cleaned = query.trim();
+  if (!cleaned) return [];
 
+  const encoded = encodeURIComponent(cleaned);
   const url = new URL(
-    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-      cleanedQuery,
-    )}.json`,
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json`,
   );
   url.searchParams.set("access_token", token);
   url.searchParams.set("autocomplete", "true");
-  url.searchParams.set("limit", String(options?.limit ?? 6));
-  url.searchParams.set("language", "en");
-
-  if (options?.country) {
-    url.searchParams.set("country", options.country);
-  } else {
-    url.searchParams.set("country", "gb");
-  }
-
+  url.searchParams.set("limit", String(options?.limit ?? 5));
+  url.searchParams.set("country", options?.country ?? "gb");
   if (options?.proximity) {
     url.searchParams.set(
       "proximity",
@@ -193,22 +176,14 @@ export async function geocodePlace(
   }
 
   const response = await fetch(url.toString());
-  if (!response.ok) {
-    return [];
-  }
+  if (!response.ok) return [];
 
-  const payload = (await response.json()) as MapboxGeocodeResponse;
-  const features = payload.features ?? [];
-  return features
-    .map((feature) => {
-      if (!feature.center || feature.center.length < 2) return null;
-      return {
-        label: feature.place_name ?? cleanedQuery,
-        longitude: feature.center[0],
-        latitude: feature.center[1],
-      };
-    })
-    .filter((item): item is GeocodeResult => item !== null);
+  const payload = await response.json();
+  return (payload.features ?? []).map((feature: any) => ({
+    label: feature.place_name ?? cleaned,
+    latitude: feature.center[1],
+    longitude: feature.center[0],
+  }));
 }
 
 export function formatDistanceMetres(metres: number) {
@@ -401,6 +376,73 @@ export type HeatmapResponse = {
   date: string | null;
   items: HeatmapCell[];
 };
+
+export type AutocompleteResult = {
+  placeId: string;
+  description: string;
+};
+
+// hits google places autocomplete, returns top 5 suggestions
+export async function placesAutocomplete(
+  input: string,
+  options?: {
+    proximity?: { latitude: number; longitude: number };
+    country?: string;
+  },
+): Promise<AutocompleteResult[]> {
+  const key = env.googleMapsApiKey;
+  if (!key) return [];
+  const cleaned = input.trim();
+  if (!cleaned) return [];
+
+  const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+  url.searchParams.set("input", cleaned);
+  url.searchParams.set("key", key);
+  url.searchParams.set("components", `country:${options?.country ?? "gb"}`);
+  if (options?.proximity) {
+    url.searchParams.set(
+      "location",
+      `${options.proximity.latitude},${options.proximity.longitude}`,
+    );
+    url.searchParams.set("radius", "50000");
+  }
+
+  const response = await fetch(url.toString());
+  if (!response.ok) return [];
+
+  const payload = await response.json();
+  return (payload.predictions ?? []).slice(0, 5).map((p: any) => ({
+    placeId: p.place_id,
+    description: p.description,
+  }));
+}
+
+// reverse geocode coords to a place name via mapbox
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+): Promise<string> {
+  const token = env.mapboxAccessToken;
+  if (!token) return "Unknown area";
+
+  const url = new URL(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json`,
+  );
+  url.searchParams.set("access_token", token);
+  url.searchParams.set("types", "neighborhood,locality,place");
+  url.searchParams.set("limit", "1");
+
+  try {
+    const response = await fetch(url.toString());
+    if (!response.ok) return "Unknown area";
+    const payload = await response.json();
+    const feature = payload.features?.[0];
+    if (!feature) return "Unknown area";
+    return feature.text ?? feature.place_name ?? "Unknown area";
+  } catch {
+    return "Unknown area";
+  }
+}
 
 export const BIRMINGHAM_DEFAULT_CENTER: Coordinates = {
   latitude: 52.4862,
