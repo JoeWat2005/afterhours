@@ -4,15 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.integrations.google_transit_client import fetch_google_transit_route_candidates
 from app.integrations.mapbox_directions_client import fetch_mapbox_route_candidates
 from app.schemas.routes import (
     RoutePlanRequest,
+    RouteOverlaysRequest,
+    RouteOverlaysResponse,
     RouteScoreRequest,
     RouteScoreResponse,
+    RouteTransportMode,
     SafetyReportRequest,
     SafetyReportValidationResponse,
 )
 from app.services.route_candidate_enricher import enrich_and_score_routes
+from app.services.route_overlays import get_route_overlays
 from app.services.safety_reports import validate_report
 
 router = APIRouter()
@@ -34,6 +39,38 @@ def _haversine_metres(
     sin_lon = math.sin(delta_lon / 2)
     haversine = sin_lat * sin_lat + math.cos(lat1) * math.cos(lat2) * sin_lon * sin_lon
     return 2 * earth_radius * math.asin(math.sqrt(haversine))
+
+
+def _http_error_detail(exc: httpx.HTTPStatusError, *, fallback: str) -> str:
+    detail = fallback
+    try:
+        payload_json = exc.response.json()
+        if isinstance(payload_json, dict):
+            detail = payload_json.get("message") or payload_json.get("detail") or detail
+    except Exception:
+        detail = str(exc)
+    return detail
+
+
+async def _fetch_walking_candidates(payload: RoutePlanRequest):
+    try:
+        return await fetch_mapbox_route_candidates(
+            origin_latitude=payload.origin.latitude,
+            origin_longitude=payload.origin.longitude,
+            destination_latitude=payload.destination.latitude,
+            destination_longitude=payload.destination.longitude,
+            alternatives=payload.alternatives,
+        )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=_http_error_detail(
+                exc,
+                fallback="Route provider rejected this route request.",
+            ),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/score", response_model=RouteScoreResponse)
@@ -64,33 +101,22 @@ async def plan_and_score_routes(
             ),
         )
 
-    try:
-        route_candidates = await fetch_mapbox_route_candidates(
-            origin_latitude=payload.origin.latitude,
-            origin_longitude=payload.origin.longitude,
-            destination_latitude=payload.destination.latitude,
-            destination_longitude=payload.destination.longitude,
-            alternatives=payload.alternatives,
-        )
-    except httpx.HTTPStatusError as exc:
-        detail = "Route provider rejected this route request."
+    fallback_warning: str | None = None
+    if payload.transport_mode == RouteTransportMode.WALKING_TRANSIT:
         try:
-            payload_json = exc.response.json()
-            if isinstance(payload_json, dict):
-                detail = (
-                    payload_json.get("message")
-                    or payload_json.get("detail")
-                    or detail
-                )
-        except Exception:
-            detail = str(exc)
-
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=detail,
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+            route_candidates = await fetch_google_transit_route_candidates(
+                origin_latitude=payload.origin.latitude,
+                origin_longitude=payload.origin.longitude,
+                destination_latitude=payload.destination.latitude,
+                destination_longitude=payload.destination.longitude,
+                depart_at=payload.depart_at,
+                alternatives=payload.alternatives,
+            )
+        except (httpx.HTTPStatusError, ValueError, RuntimeError):
+            route_candidates = await _fetch_walking_candidates(payload)
+            fallback_warning = "transit_provider_unavailable_fallback_to_walking"
+    else:
+        route_candidates = await _fetch_walking_candidates(payload)
 
     score_payload = RouteScoreRequest(
         origin=payload.origin,
@@ -102,12 +128,28 @@ async def plan_and_score_routes(
         route_candidates=route_candidates,
     )
 
-    return await enrich_and_score_routes(
+    result = await enrich_and_score_routes(
         score_payload,
         db=db,
         crime_date=payload.crime_date,
         crime_category=payload.crime_category,
     )
+    if fallback_warning is not None:
+        return result.model_copy(
+            update={"warnings": sorted(set(result.warnings + [fallback_warning]))}
+        )
+    return result
+
+
+@router.post("/overlays", response_model=RouteOverlaysResponse)
+async def list_route_overlays(
+    payload: RouteOverlaysRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RouteOverlaysResponse:
+    try:
+        return await get_route_overlays(payload, db=db)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/reports/validate", response_model=SafetyReportValidationResponse)
