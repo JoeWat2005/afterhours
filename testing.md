@@ -4,8 +4,8 @@
 This document outlines the testing approach for the After Hours project, ensuring both the Python backend and the React Native frontend function correctly in isolation and when integrated.
 
 **Tools Utilized:**
-* **Backend:** `pytest` for unit and integration testing.
-* **Coverage:** `pytest-cov` for backend coverage tracking.
+* **Backend:** `pytest` for unit and integration testing
+* **Coverage:** `pytest-cov` for backend coverage tracking
 
 ## Backend Unit Testing (Python)
 Unit tests focus on isolating individual functions and testing their logic against expected outcomes, particularly concerning data processing and calculations.

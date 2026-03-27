@@ -316,7 +316,7 @@ def test_users_me_and_compatibility_endpoints(client: TestClient) -> None:
 
 
 def test_heatmap_endpoint_response_shape(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _mock_heatmap(query: heatmap_service.HeatmapQuery) -> heatmap_service.HeatmapResult:
+    async def _mock_heatmap(query: heatmap_service.HeatmapQuery, **kwargs) -> heatmap_service.HeatmapResult:
         _ = query
         return heatmap_service.HeatmapResult(
             latitude=51.5,
