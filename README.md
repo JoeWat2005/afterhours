@@ -17,7 +17,8 @@ The project also aligns with UN Sustainable Development Goal 11 by focusing on s
 ```text
 .
 ├── apps/
-│   └── mobile/              Expo / React Native app (includes convex/ and android/)
+│   └── mobile/              Expo / React Native app
+├── convex/                  Realtime sync + document service
 ├── docs/                    Main project docs
 ├── docker/                  Dockerfiles for API and worker
 ├── infra/
@@ -79,83 +80,72 @@ There is an [example .env file](./.env.example) at the repo root with example en
 - AWS RDS PostgreSQL + PostGIS
 - AWS ElastiCache Redis
 
-## Running the app
+## Quick Setup
 
-You need **Docker Desktop** and **Node 22+** installed. That is basically it.
+### What you need
 
-### 1. Start the backend
+- Node 22
+- npm 11
+- Python 3.13
+- Docker Desktop
 
-```bash
-cd services/api
-cp .env.example .env
-docker compose up --build
-```
+Terraform is only needed if you are doing backend AWS infra stuff.
 
-This starts Postgres (with PostGIS), Redis and the API on `localhost:8000`. It runs migrations and seeds the database with sample reports automatically, so there is something to look at on first load.
-
-### 2. Start the mobile app
+### Frontend setup
 
 ```bash
 npm install
-cd apps/mobile
-npx expo start
+cp .env.example .env
+npx convex login
+npx convex dev
+npm run mobile:start
 ```
 
-Press `i` for the iOS simulator or `a` for Android. The app points at `localhost:8000` by default.
+If you are working on the map features, you will need a valid Mapbox token in `.env`.
 
-On the sign in screen you can tap **Try demo** to skip authentication and go straight to the map. This works without a Clerk account, the backend accepts unauthenticated requests in development mode.
+### Local backend setup
 
-If you want to sign in properly, use a Clerk account registered under the project’s publishable key.
-
-### 3. iOS simulator location
-
-The iOS simulator defaults to San Francisco. To set it to Birmingham (where the heatmap and seed data are):
+Start local services:
 
 ```bash
-xcrun simctl location booted set 52.4862,-1.8904
+docker compose -f infra/local/docker-compose.yml up -d
 ```
 
-### Running on Android
-
-There is no `android/` folder committed because EAS cloud builds regenerate it. If you want to build locally you would need Android Studio, then:
+Set up the API:
 
 ```bash
-cd apps/mobile
-npx expo prebuild --platform android
-npx expo run:android
-```
-
-Alternatively we have an EAS build profile that produces an APK in the cloud without needing Android Studio:
-
-```bash
-cd apps/mobile
-npx eas build --profile preview --platform android
-```
-
-### Running the tests
-
-```bash
-cd services/api
+cd /Users/benjamincheesebrough/Desktop/AlgorithmAvengers/services/api
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-
-pytest tests/unit/ -v          # fast, no external deps
-pytest tests/integration/ -v   # needs postgres running
+python -m app.main
 ```
 
-### Known issues
+Set up the worker:
 
-- In demo mode (unauthenticated), user report pins don’t appear on the map. The heatmap, route planning, services and report submission all work fine. We think it is a timing issue with how the sync fires before the demo flag propagates, but ran out of time to fix it.
-- The Android APK build via EAS is set up but hasn’t been fully tested end to end on a device yet.
+```bash
+cd /Users/benjamincheesebrough/Desktop/AlgorithmAvengers/services/worker
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+python -m worker.main
+```
 
-### Environment variables
-
-The `.env.example` in `services/api/` has everything documented. The root `.env` has the mobile app keys (Mapbox, Clerk, Google Maps). API keys are included for development use only.
-
-## How we used the repo
+## How We Use The Repo
 
 - `main` = stable branch
 - `develop` = shared integration branch
-- feature work went on feature branches and got PR’d into `develop`
+- feature work goes on feature branches and gets PR'd into `develop`
 
 Read the full workflow in [docs/conventions.md](./docs/conventions.md).
+
+## Short Project Plan
+
+The rough build order is:
+
+1. get the core frontend/backend skeleton in place
+2. wire auth and basic account flow
+3. build the map-based route experience
+4. add crime / lighting / transport overlays and filters
+5. add user reporting
+6. tighten up caching, offline behaviour, and edge cases

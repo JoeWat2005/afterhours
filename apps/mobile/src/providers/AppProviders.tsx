@@ -1,35 +1,41 @@
 import type { PropsWithChildren } from "react";
 
-import { useAuth } from "@clerk/expo";
+import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 
-import { RouteSessionProvider } from "../features/route/routeSession";
+import { tokenCache } from "../lib/clerk-token-cache";
 import { env } from "../lib/env";
 import { UiPreferencesProvider } from "./UIPreferences";
 
-const convexClient = env.convexUrl
-  ? new ConvexReactClient(env.convexUrl)
-  : null;
+const convexClient = env.convexUrl ? new ConvexReactClient(env.convexUrl) : null;
 
 export function AppProviders({ children }: PropsWithChildren) {
-  let content = children;
+  const content = (() => {
+    if (!env.clerkPublishableKey && !convexClient) {
+      return children;
+    }
 
-  if (convexClient) {
-    content = (
-      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
-        {children}
-      </ConvexProviderWithClerk>
-    );
-  }
+    if (env.clerkPublishableKey && convexClient) {
+      return (
+        <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
+          <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
+            {children}
+          </ConvexProviderWithClerk>
+        </ClerkProvider>
+      );
+    }
 
-  if (!env.clerkPublishableKey && convexClient) {
-    content = <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
-  }
+    if (env.clerkPublishableKey) {
+      return (
+        <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
+          {children}
+        </ClerkProvider>
+      );
+    }
 
-  return (
-    <UiPreferencesProvider>
-      <RouteSessionProvider>{content}</RouteSessionProvider>
-    </UiPreferencesProvider>
-  );
+    return <ConvexProvider client={convexClient!}>{children}</ConvexProvider>;
+  })();
+
+  return <UiPreferencesProvider>{content}</UiPreferencesProvider>;
 }

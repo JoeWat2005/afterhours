@@ -36,7 +36,6 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# Native projects are committed for this app (expo prebuild output lives in-repo).
-# If you switch to fully managed workflow only, you can ignore them again:
-# /ios
-# /android
+# generated native folders
+/ios
+/android

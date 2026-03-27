@@ -1,33 +1,24 @@
-import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Mapbox from "@rnmapbox/maps";
-import * as Location from "expo-location";
 
 import { env } from "../../lib/env";
 import { useUiPreferences } from "../../providers/UIPreferences";
 
 Mapbox.setAccessToken(env.mapboxAccessToken ?? "");
 
-export function MapPreview() {
-  const mapEnabled = Boolean(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN);
-  const { highContrast } = useUiPreferences();
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+const DEFAULT_VIEW_STATE = {
+  centerCoordinate: [-1.89357, 52.48306] as [number, number],
+  zoomLevel: 12,
+};
 
-  useEffect(() => {
-    (async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== "granted") return;
-      try {
-        const position = await Location.getCurrentPositionAsync({});
-        setUserLocation([position.coords.longitude, position.coords.latitude]);
-      } catch {
-        const last = await Location.getLastKnownPositionAsync();
-        if (last) {
-          setUserLocation([last.coords.longitude, last.coords.latitude]);
-        }
-      }
-    })();
-  }, []);
+const CITY_BOUNDS = {
+  ne: [-1.7088, 52.5310] as [number, number],
+  sw: [-2.0336, 52.3810] as [number, number],
+};
+
+export function MapPreview() {
+  const mapEnabled = Boolean(env.mapboxAccessToken);
+  const { highContrast } = useUiPreferences();
 
   if (!mapEnabled) {
     return (
@@ -50,14 +41,10 @@ export function MapPreview() {
         attributionEnabled={true}
       >
         <Mapbox.Camera
-          centerCoordinate={userLocation ?? [-1.89357, 52.48306]}
-          zoomLevel={14}
+          centerCoordinate={DEFAULT_VIEW_STATE.centerCoordinate}
+          zoomLevel={DEFAULT_VIEW_STATE.zoomLevel}
+          maxBounds={CITY_BOUNDS}
         />
-        {userLocation ? (
-          <Mapbox.PointAnnotation id="user-location" coordinate={userLocation}>
-            <View className="h-4 w-4 rounded-full bg-blue-500 border-2 border-white" />
-          </Mapbox.PointAnnotation>
-        ) : null}
       </Mapbox.MapView>
     </View>
   );

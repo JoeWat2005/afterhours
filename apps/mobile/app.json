@@ -17,12 +17,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "uk.ac.bham.afterhours",
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        }
-      }
+      "bundleIdentifier": "uk.ac.bham.afterhours"
     },
     "android": {
       "package": "uk.ac.bham.afterhours",
@@ -43,25 +38,21 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-web-browser",
-      "@clerk/expo",
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsImpl": "mapbox"
-        }
-      ]
-    ],
+  "expo-router",
+  "expo-secure-store",
+  "expo-web-browser",
+  "@clerk/expo",
+  [
+    "@rnmapbox/maps",
+    {
+      "RNMapboxMapsImpl": "mapbox",
+      "RNMapboxMapsDownloadToken": "secretkey"
+    }
+  ]
+],
     "extra": {
       "projectName": "AlgorithmAvengers",
-      "architecture": "mobile-convex-clerk-mapbox",
-      "router": {},
-      "eas": {
-        "projectId": "3d5ffc79-1d76-4833-8aeb-04645879b933"
-      }
-    },
-    "owner": "btc517"
+      "architecture": "mobile-convex-clerk-mapbox"
+    }
   }
 }

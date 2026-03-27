@@ -1,8 +1,11 @@
 {
+  "plugins": [
+    "@clerk/expo",
+    "expo-secure-store",
+    "expo-web-browser",
+    "@rnmapbox/maps"
+  ],
   "android": {
-    "package": "com.iamoks.algorithmavengers"
-  },
-  "ios": {
-    "bundleIdentifier": "com.iamoks.algorithmavengers"
+    "package": "com.anonymous.algorithmavengers"
   }
 }
