@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useAuth } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,15 +42,6 @@ function getSelectedRoute(
 ) {
   if (!selectedRouteId) return null;
   return rankedRoutes.find((route) => route.candidate_id === selectedRouteId) ?? null;
-}
-
-function isWithinBirminghamScope(latitude: number, longitude: number) {
-  return (
-    latitude >= 52.381 &&
-    latitude <= 52.531 &&
-    longitude >= -2.0336 &&
-    longitude <= -1.7088
-  );
 }
 
 function toRadians(value: number) {
@@ -92,12 +83,20 @@ function buildRoutePlanningToggles(
 
 export default function RouteScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ destination?: string }>();
   const { highContrast, routeOptions, lowDataMode } = useUiPreferences();
   const { getToken } = useAuth();
   const { startSession } = useRouteSession();
 
-  const [originLabel, setOriginLabel] = useState("Current location (emulator GPS)");
-  const [destinationText, setDestinationText] = useState("Queen Elizabeth Hospital");
+  const [originLabel, setOriginLabel] = useState("Current location");
+  const [destinationText, setDestinationText] = useState(params.destination ?? "");
+
+  // pick up destination from search bar on the map tab
+  useEffect(() => {
+    if (params.destination) {
+      setDestinationText(params.destination);
+    }
+  }, [params.destination]);
   const [planning, setPlanning] = useState(false);
   const [startingWalk, setStartingWalk] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,15 +130,13 @@ export default function RouteScreen() {
       });
       return {
         ...BIRMINGHAM_DEFAULT_CENTER,
-        label: "Birmingham (location permission denied)",
+        label: "Birmingham (location denied)",
       };
     }
 
-    let resolved: Coordinates | null = null;
-
     try {
       const current = await Location.getCurrentPositionAsync({});
-      resolved = {
+      return {
         latitude: current.coords.latitude,
         longitude: current.coords.longitude,
         label: "Current location",
@@ -152,35 +149,22 @@ export default function RouteScreen() {
       logPrototypeEvent("route_origin_unavailable", { error: message });
     }
 
-    if (!resolved) {
-      try {
-        const lastKnown = await Location.getLastKnownPositionAsync();
-        if (lastKnown) {
-          resolved = {
-            latitude: lastKnown.coords.latitude,
-            longitude: lastKnown.coords.longitude,
-            label: "Last known location",
-          };
-        }
-      } catch {
-        resolved = null;
+    try {
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown) {
+        return {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+          label: "Last known location",
+        };
       }
-    }
-
-    if (resolved && isWithinBirminghamScope(resolved.latitude, resolved.longitude)) {
-      return resolved;
-    }
-
-    if (resolved) {
-      logPrototypeEvent("route_origin_out_of_scope", {
-        latitude: resolved.latitude,
-        longitude: resolved.longitude,
-      });
+    } catch {
+      // fall through to default
     }
 
     return {
       ...BIRMINGHAM_DEFAULT_CENTER,
-      label: "Birmingham (scope fallback)",
+      label: "Birmingham (couldn't get location)",
     };
   }
 
@@ -206,10 +190,7 @@ export default function RouteScreen() {
           distance: distanceMetres(originCandidate, candidate),
         }))
         .sort((a, b) => a.distance - b.distance)
-        .map(({ candidate }) => candidate)
-        .find((candidate) =>
-          isWithinBirminghamScope(candidate.latitude, candidate.longitude),
-        ) ?? destinationResults[0];
+        .map(({ candidate }) => candidate)[0];
 
       if (!destinationCandidate) {
         throw new Error("Could not resolve destination.");
@@ -218,7 +199,7 @@ export default function RouteScreen() {
       const beelineDistanceMetres = distanceMetres(originCandidate, destinationCandidate);
       if (beelineDistanceMetres > MAX_LOCAL_WALK_DISTANCE_METRES) {
         throw new Error(
-          "Destination is too far from current location for a local walking route. Check emulator location or use a nearby Birmingham destination.",
+          "Destination is too far from your current location for a walking route. Try a closer destination.",
         );
       }
 

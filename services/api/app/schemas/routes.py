@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -17,6 +18,11 @@ class RouteBiasMode(str, Enum):
     MAXIMUM_SAFETY = "maximum_safety"
     BALANCED = "balanced"
     MOST_EFFICIENCY = "most_efficiency"
+
+
+class RouteTransportMode(str, Enum):
+    WALKING_ONLY = "walking_only"
+    WALKING_TRANSIT = "walking_transit"
 
 
 class RouteAccessibilityChoices(BaseModel):
@@ -159,6 +165,12 @@ class RouteNavigationStep(BaseModel):
     maneuver_modifier: str | None = None
     maneuver_location: LonLat | None = None
     geometry_geojson: dict | None = None
+    mode: str | None = None
+    line: str | None = None
+    from_stop: str | None = None
+    to_stop: str | None = None
+    depart_at: str | None = None
+    arrive_at: str | None = None
 
 
 class RouteNavigationMetadata(BaseModel):
@@ -256,6 +268,57 @@ class RouteScoreResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class RouteOverlayInclude(str, Enum):
+    TRANSIT = "transit"
+    REPORTS = "reports"
+    SERVICES = "services"
+
+
+class RouteOverlayType(str, Enum):
+    TRANSIT = "transit"
+    REPORT = "report"
+    SERVICE = "service"
+
+
+class RouteOverlayItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    overlay_type: RouteOverlayType
+    subtype: str
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    distance_from_route_metres: float | None = Field(default=None, ge=0)
+    source: str = Field(default="unknown", min_length=1, max_length=64)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RouteOverlaysRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    route_geometry_geojson: dict
+    include: list[RouteOverlayInclude] = Field(
+        default_factory=lambda: [
+            RouteOverlayInclude.TRANSIT,
+            RouteOverlayInclude.REPORTS,
+            RouteOverlayInclude.SERVICES,
+        ],
+        min_length=1,
+    )
+    near_route_radius_metres: int = Field(default=150, gt=0, le=500)
+    limit_per_type: int = Field(default=50, gt=0, le=200)
+    report_max_age_days: int | None = Field(default=90, ge=1, le=3650)
+
+
+class RouteOverlaysResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[RouteOverlayItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    generated_at: datetime
+
+
 class SafetyReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -280,6 +343,7 @@ class RoutePlanRequest(BaseModel):
     origin: RouteLocation
     destination: RouteLocation
     depart_at: datetime
+    transport_mode: RouteTransportMode = RouteTransportMode.WALKING_ONLY
     bias_mode: RouteBiasMode = RouteBiasMode.BALANCED
     requirements: RouteRequirements = Field(default_factory=RouteRequirements)
     preferences: RoutePreferences = Field(default_factory=RoutePreferences)

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { useAuth } from "@clerk/expo";
@@ -10,17 +11,21 @@ import Mapbox from "@rnmapbox/maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "../../convex/_generated/api";
-import { mapCanonicalToConvexCategory } from "../../src/features/reports/categories";
+import { mapCanonicalToConvexCategory, mapUiIssueToCategories } from "../../src/features/reports/categories";
 import {
   BIRMINGHAM_DEFAULT_CENTER,
   apiRequest,
   formatDistanceMetres,
   logPrototypeEvent,
+  geocodePlace,
+  reverseGeocode,
+  type GeocodeResult,
   type Coordinates,
   type HeatmapResponse,
   type NearbyReportsResponse,
   type RoutePlanResponse,
   type RoutePlanRequest,
+  type SafetyReportResponse,
 } from "../../src/lib/api";
 import {
   computeRouteProgress,
@@ -33,10 +38,6 @@ import { env } from "../../src/lib/env";
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "");
 
-const CITY_BOUNDS = {
-  ne: [-1.7088, 52.531] as [number, number],
-  sw: [-2.0336, 52.381] as [number, number],
-};
 const DEFAULT_CENTER: [number, number] = [
   BIRMINGHAM_DEFAULT_CENTER.longitude,
   BIRMINGHAM_DEFAULT_CENTER.latitude,
@@ -45,6 +46,17 @@ const OFF_ROUTE_THRESHOLD_METRES = 45;
 const OFF_ROUTE_SAMPLE_LIMIT = 3;
 const HEATMAP_RADIUS_METRES = 2500;
 const HEATMAP_CELL_SIZE_METRES = 180;
+
+const ISSUE_OPTIONS = [
+  "Crime",
+  "Break-in / Burglary",
+  "Harassment",
+  "Unsafe Area",
+  "Poor Lighting",
+  "Road Hazard / Potholes",
+  "Anti-social Behaviour",
+  "Other",
+];
 
 type PermissionState = "idle" | "granted" | "denied";
 
@@ -71,6 +83,7 @@ export default function HomeScreen() {
   const { hasConvexToken, checked: convexTokenChecked } = useConvexTokenAvailability();
   const convexEnabled = Boolean(env.convexUrl);
   const upsertReport = useMutation(api.reports.upsertReportFromApi);
+  const createRealtimeReport = useMutation(api.reports.createReport);
   const reports = useQuery(
     api.reports.listReports,
     isLoaded && isSignedIn && convexEnabled && hasConvexToken ? {} : "skip",
@@ -86,6 +99,7 @@ export default function HomeScreen() {
     resetOffRouteSamples,
     replaceActiveRoute,
     setRerouting,
+    startSession,
   } = useRouteSession();
 
   const [permissionState, setPermissionState] = useState<PermissionState>("idle");
@@ -95,12 +109,248 @@ export default function HomeScreen() {
   const [syncingHeatmap, setSyncingHeatmap] = useState(false);
   const [apiReports, setApiReports] = useState<NearbyReportsResponse["items"]>([]);
   const [heatmapEnabled, setHeatmapEnabled] = useState(true);
+  const [showCrimePins, setShowCrimePins] = useState(false);
+  const [showReportPins, setShowReportPins] = useState(true);
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
   const [heatmapData, setHeatmapData] = useState<HeatmapResponse | null>(null);
   const mapCameraRef = useRef<Mapbox.Camera>(null);
   const reportSyncTimerRef = useRef<number | null>(null);
   const heatmapSyncTimerRef = useRef<number | null>(null);
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
+  const [areaName, setAreaName] = useState("Locating...");
+  const [searchText, setSearchText] = useState("");
+  const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
+  const searchTimerRef = useRef<number | null>(null);
+  const [routePreview, setRoutePreview] = useState<{
+    plan: RoutePlanResponse;
+    origin: Coordinates;
+    destination: Coordinates;
+  } | null>(null);
+  const [planningRoute, setPlanningRoute] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [startingWalk, setStartingWalk] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000) as unknown as number;
+  }
+
+  // report mode
+  const [reportMode, setReportMode] = useState(false);
+  const [reportIssue, setReportIssue] = useState<string | null>(null);
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportLocation, setReportLocation] = useState<Coordinates | null>(null);
+  const [reportPickingLocation, setReportPickingLocation] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  function openReportMode() {
+    setReportMode(true);
+    setReportIssue(null);
+    setReportDescription("");
+    setReportLocation(null);
+    setReportPickingLocation(false);
+  }
+
+  function closeReportMode() {
+    setReportMode(false);
+    setReportPickingLocation(false);
+  }
+
+  function handleMapPress(event: { geometry: { coordinates: [number, number] } }) {
+    if (!reportPickingLocation) return;
+    const [lng, lat] = event.geometry.coordinates;
+    setReportLocation({ latitude: lat, longitude: lng });
+    setReportPickingLocation(false);
+  }
+
+  async function submitReport() {
+    if (reportSubmitting) return;
+    if (!reportIssue) {
+      showToast("Pick an issue type");
+      return;
+    }
+    if (reportDescription.trim().length < 12) {
+      showToast("Description needs to be a bit longer");
+      return;
+    }
+
+    const coords = reportLocation ?? currentLocation;
+    if (!coords) {
+      showToast("Still getting your location, try again");
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      const mapped = mapUiIssueToCategories(reportIssue);
+      const summary = `${reportIssue} near ${areaName}`.slice(0, 280);
+
+      const saved = await apiRequest<SafetyReportResponse>("/reports", getToken, {
+        method: "POST",
+        body: {
+          category: mapped.canonical,
+          summary,
+          details: reportDescription.trim(),
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+      });
+
+      try {
+        await createRealtimeReport({
+          apiReportId: saved.id,
+          latitude: saved.latitude,
+          longitude: saved.longitude,
+          category: mapped.convex,
+          description: saved.summary,
+          location: `${areaName} (${saved.latitude.toFixed(5)}, ${saved.longitude.toFixed(5)})`,
+        });
+      } catch {
+        // convex mirror is optional
+      }
+
+      showToast("Report submitted, cheers");
+      closeReportMode();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to submit report";
+      showToast(msg);
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
+
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
+
+  const previewRoute = routePreview
+    ? routePreview.plan.ranked_routes.find(
+        (r) => r.candidate_id === (selectedPreviewId ?? routePreview.plan.selected_route_id),
+      ) ?? routePreview.plan.ranked_routes[0]
+    : null;
+
+  const previewRouteShapes = useMemo(() => {
+    if (!routePreview) return [];
+    return routePreview.plan.ranked_routes
+      .filter((r) => r.geometry_geojson)
+      .map((r) => ({
+        id: r.candidate_id,
+        shape: {
+          type: "Feature" as const,
+          properties: {},
+          geometry: r.geometry_geojson!,
+        },
+      }));
+  }, [routePreview]);
+
+  function handleSearchChange(text: string) {
+    setSearchText(text);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!text.trim()) {
+      setSuggestions([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      const results = await geocodePlace(text, {
+        proximity: currentLocation ?? undefined,
+        limit: 5,
+      });
+      setSuggestions(results);
+    }, 400) as unknown as number;
+  }
+
+  async function handleSuggestionPress(suggestion: GeocodeResult) {
+    setSearchText("");
+    setSuggestions([]);
+    setPlanError(null);
+    if (!currentLocation) {
+      setPlanError("Still getting your location, try again");
+      return;
+    }
+
+    setPlanningRoute(true);
+    try {
+      const origin: Coordinates = {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        label: "Current location",
+      };
+      const destination: Coordinates = {
+        latitude: suggestion.latitude,
+        longitude: suggestion.longitude,
+        label: suggestion.label,
+      };
+      const routeToggles = buildRoutePlanningToggles(routeOptions);
+      const plan = await apiRequest<RoutePlanResponse>("/routes/plan", getToken, {
+        method: "POST",
+        requireAuth: false,
+        body: {
+          origin,
+          destination,
+          depart_at: new Date().toISOString(),
+          alternatives: lowDataMode ? 1 : 3,
+          ...routeToggles,
+        },
+      });
+      setRoutePreview({ plan, origin, destination });
+      setSelectedPreviewId(plan.selected_route_id);
+
+      mapCameraRef.current?.fitBounds(
+        [destination.longitude, destination.latitude],
+        [origin.longitude, origin.latitude],
+        [80, 80, 300, 80],
+        500,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Route planning failed";
+      setPlanError(msg);
+      showToast(msg);
+      logPrototypeEvent("route_preview_failed", { error: msg });
+    } finally {
+      setPlanningRoute(false);
+    }
+  }
+
+  async function handleStartWalk() {
+    if (!routePreview || !previewRoute || startingWalk) return;
+    setStartingWalk(true);
+    try {
+      let journeyId: string | undefined;
+      try {
+        const journey = await apiRequest<{ id: string }>("/journeys", getToken, {
+          method: "POST",
+          body: {
+            origin_label: routePreview.origin.label ?? "Current location",
+            destination_label: routePreview.destination.label ?? "Destination",
+            selected_route_id: previewRoute.candidate_id,
+            ranked_routes: routePreview.plan.ranked_routes,
+          },
+        });
+        journeyId = journey.id;
+      } catch {
+        // journey save is optional
+      }
+
+      startSession({
+        journeyId: journeyId ?? null,
+        origin: routePreview.origin,
+        destination: routePreview.destination,
+        selectedRouteId: previewRoute.candidate_id,
+        rankedRoutes: routePreview.plan.ranked_routes,
+      });
+      setRoutePreview(null);
+    } catch {
+      // handled by session
+    } finally {
+      setStartingWalk(false);
+    }
+  }
+
+  function cancelRoutePreview() {
+    setRoutePreview(null);
+    setSelectedPreviewId(null);
+  }
 
   const theme = {
     topPanel: highContrast
@@ -187,23 +437,36 @@ export default function HomeScreen() {
       features: heatmapData.items.map((item) => ({
         type: "Feature" as const,
         properties: {
-          id: item.cell_id,
           risk_score: item.risk_score,
           source_count: item.source_count,
         },
         geometry: {
-          type: "Polygon" as const,
-          coordinates: [[
-            [item.bounds.min_longitude, item.bounds.min_latitude],
-            [item.bounds.max_longitude, item.bounds.min_latitude],
-            [item.bounds.max_longitude, item.bounds.max_latitude],
-            [item.bounds.min_longitude, item.bounds.max_latitude],
-            [item.bounds.min_longitude, item.bounds.min_latitude],
-          ]],
+          type: "Point" as const,
+          coordinates: [item.center_longitude, item.center_latitude],
         },
       })),
     };
   }, [heatmapData]);
+
+  const crimePinFeatures = useMemo(() => {
+    if (!heatmapData?.crime_pins?.length) {
+      return { type: "FeatureCollection" as const, features: [] };
+    }
+    return {
+      type: "FeatureCollection" as const,
+      features: heatmapData.crime_pins.map((pin) => ({
+        type: "Feature" as const,
+        properties: {
+          category: pin.category,
+          month: pin.month,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [pin.longitude, pin.latitude],
+        },
+      })),
+    };
+  }, [heatmapData?.crime_pins]);
 
   async function startLocationTracking() {
     setLocationError(null);
@@ -303,6 +566,7 @@ export default function HomeScreen() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "report sync failed";
+      showToast("Reports: " + message);
       logPrototypeEvent("report_reconciliation_failed", { error: message });
     } finally {
       setSyncingReports(false);
@@ -330,6 +594,7 @@ export default function HomeScreen() {
       const message =
         error instanceof Error ? error.message : "Heatmap sync failed";
       setHeatmapError(message);
+      showToast("Heatmap: " + message);
       logPrototypeEvent("heatmap_sync_failed", { error: message });
     } finally {
       setSyncingHeatmap(false);
@@ -386,6 +651,12 @@ export default function HomeScreen() {
       }
     };
   }, []);
+
+  function handleMapIdle(state: { properties: { center: number[] } }) {
+    const [lng, lat] = state.properties.center;
+    if (lng === undefined || lat === undefined) return;
+    void reverseGeocode(lat, lng).then(setAreaName);
+  }
 
   useEffect(() => {
     if (!session || !currentLocation || session.status !== "active") return;
@@ -498,35 +769,68 @@ export default function HomeScreen() {
           styleURL={highContrast ? Mapbox.StyleURL.Light : Mapbox.StyleURL.Dark}
           scaleBarEnabled={false}
           compassEnabled={false}
+          onMapIdle={handleMapIdle}
+          onPress={(e: any) => handleMapPress(e)}
         >
           <Mapbox.Camera
             ref={mapCameraRef}
-            zoomLevel={12}
+            zoomLevel={14}
             centerCoordinate={
               currentLocation
                 ? [currentLocation.longitude, currentLocation.latitude]
                 : DEFAULT_CENTER
             }
-            maxBounds={CITY_BOUNDS}
           />
 
           {heatmapEnabled ? (
             <Mapbox.ShapeSource id="heatmap-source" shape={heatmapFeatures}>
-              <Mapbox.FillLayer
+              <Mapbox.HeatmapLayer
                 id="heatmap-layer"
                 style={{
-                  fillColor: [
-                    "interpolate",
-                    ["linear"],
-                    ["get", "risk_score"],
-                    0,
-                    highContrast ? "#84cc16" : "#22c55e",
-                    3,
-                    highContrast ? "#f59e0b" : "#f59e0b",
-                    8,
-                    highContrast ? "#dc2626" : "#ef4444",
-                  ] as unknown as string,
-                  fillOpacity: 0.28,
+                  heatmapRadius: [
+                    "interpolate", ["linear"], ["zoom"],
+                    10, 60,
+                    13, 80,
+                    16, 100,
+                    18, 120,
+                  ] as unknown as number,
+                  heatmapWeight: [
+                    "interpolate", ["linear"], ["get", "risk_score"],
+                    0, 0,
+                    2, 0.2,
+                    5, 0.5,
+                    10, 1,
+                  ] as unknown as number,
+                  heatmapIntensity: [
+                    "interpolate", ["linear"], ["zoom"],
+                    10, 0.8,
+                    14, 1.2,
+                    18, 2,
+                  ] as unknown as number,
+                  heatmapColor: (highContrast
+                    ? [
+                        "interpolate", ["linear"], ["heatmap-density"],
+                        0, "rgba(0,0,0,0)",
+                        0.15, "rgba(132,204,22,0.5)",
+                        0.35, "rgba(245,158,11,0.7)",
+                        0.6, "rgba(220,38,38,0.85)",
+                        1.0, "rgba(153,27,27,0.95)",
+                      ]
+                    : [
+                        "interpolate", ["linear"], ["heatmap-density"],
+                        0, "rgba(0,0,0,0)",
+                        0.1, "rgba(34,197,94,0.4)",
+                        0.3, "rgba(250,204,21,0.6)",
+                        0.5, "rgba(249,115,22,0.7)",
+                        0.7, "rgba(239,68,68,0.8)",
+                        1.0, "rgba(185,28,28,0.9)",
+                      ]
+                  ) as unknown as string,
+                  heatmapOpacity: [
+                    "interpolate", ["linear"], ["zoom"],
+                    10, 0.7,
+                    18, 0.4,
+                  ] as unknown as number,
                 }}
               />
             </Mapbox.ShapeSource>
@@ -545,18 +849,35 @@ export default function HomeScreen() {
             </Mapbox.ShapeSource>
           ) : null}
 
-          <Mapbox.ShapeSource id="reports-source" shape={reportFeatures}>
-            <Mapbox.CircleLayer
-              id="report-points"
-              style={{
-                circleRadius: 5,
-                circleColor: highContrast ? "#b91c1c" : "#f43f5e",
-                circleStrokeColor: "#ffffff",
-                circleStrokeWidth: 1,
-                circleOpacity: 0.85,
-              }}
-            />
-          </Mapbox.ShapeSource>
+          {showReportPins ? (
+            <Mapbox.ShapeSource id="reports-source" shape={reportFeatures}>
+              <Mapbox.CircleLayer
+                id="report-points"
+                style={{
+                  circleRadius: 5,
+                  circleColor: highContrast ? "#b91c1c" : "#f43f5e",
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 1,
+                  circleOpacity: 0.85,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          ) : null}
+
+          {showCrimePins ? (
+            <Mapbox.ShapeSource id="crime-pins-source" shape={crimePinFeatures}>
+              <Mapbox.CircleLayer
+                id="crime-pin-points"
+                style={{
+                  circleRadius: 4,
+                  circleColor: highContrast ? "#1d4ed8" : "#60a5fa",
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 1,
+                  circleOpacity: 0.8,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          ) : null}
 
           {session ? (
             <>
@@ -575,12 +896,59 @@ export default function HomeScreen() {
             </>
           ) : null}
 
+          {!session && previewRouteShapes.length > 0 ? (
+            <>
+              {previewRouteShapes.map((route) => {
+                const isSelected = route.id === (selectedPreviewId ?? routePreview?.plan.selected_route_id);
+                return (
+                  <Mapbox.ShapeSource key={route.id} id={`preview-${route.id}`} shape={route.shape}>
+                    <Mapbox.LineLayer
+                      id={`preview-line-${route.id}`}
+                      style={{
+                        lineColor: isSelected
+                          ? (highContrast ? "#0f172a" : "#22d3ee")
+                          : (highContrast ? "#94a3b8" : "#64748b"),
+                        lineWidth: isSelected ? 5 : 3,
+                        lineOpacity: isSelected ? 0.9 : 0.4,
+                      }}
+                    />
+                  </Mapbox.ShapeSource>
+                );
+              })}
+              {routePreview ? (
+                <>
+                  <Mapbox.PointAnnotation
+                    id="preview-origin"
+                    coordinate={[routePreview.origin.longitude, routePreview.origin.latitude]}
+                  >
+                    <View className="h-3 w-3 rounded-full bg-emerald-500 border border-white" />
+                  </Mapbox.PointAnnotation>
+                  <Mapbox.PointAnnotation
+                    id="preview-destination"
+                    coordinate={[routePreview.destination.longitude, routePreview.destination.latitude]}
+                  >
+                    <View className="h-3 w-3 rounded-full bg-rose-500 border border-white" />
+                  </Mapbox.PointAnnotation>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
           {currentLocation ? (
             <Mapbox.PointAnnotation
               id="current-marker"
               coordinate={[currentLocation.longitude, currentLocation.latitude]}
             >
               <View className="h-4 w-4 rounded-full bg-blue-500 border border-white" />
+            </Mapbox.PointAnnotation>
+          ) : null}
+
+          {reportMode && reportLocation ? (
+            <Mapbox.PointAnnotation
+              id="report-pin"
+              coordinate={[reportLocation.longitude, reportLocation.latitude]}
+            >
+              <View className="h-4 w-4 rounded-full bg-amber-500 border-2 border-white" />
             </Mapbox.PointAnnotation>
           ) : null}
         </Mapbox.MapView>
@@ -593,60 +961,99 @@ export default function HomeScreen() {
       )}
 
       <View
-        className={`absolute left-4 right-4 rounded-2xl border px-4 py-3 ${theme.topPanel}`}
+        className="absolute left-0 right-0"
         style={{ top: insets.top + 8 }}
       >
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className={`font-bold ${theme.primaryText}`}>AfterHours live walk</Text>
-            <Text className={`text-xs ${theme.secondaryText}`}>
-              {!convexEnabled
-                ? `${apiReports.length} reports (API only)`
-                : !convexTokenChecked
-                  ? "Connecting to Convex..."
-                  : hasConvexToken
-                    ? reports
-                      ? `${reports.length} realtime reports (authenticated)`
-                      : "Loading realtime reports..."
-                    : `${apiReports.length} reports (Convex anonymous)`}
+        <View className="items-center">
+          <View
+            className={`rounded-full px-5 py-2 ${
+              highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
+          >
+            <Text className={`text-sm font-medium ${theme.primaryText}`} numberOfLines={1}>
+              {areaName}
             </Text>
-          </View>
-          <View className="flex-row">
-            <Link href="/profile" asChild>
-              <Pressable className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-slate-800/40">
-                <Ionicons name="person-outline" size={19} color="white" />
-              </Pressable>
-            </Link>
-            <Link href="/settings" asChild>
-              <Pressable className="h-10 w-10 items-center justify-center rounded-full bg-slate-800/40">
-                <Ionicons name="settings-outline" size={19} color="white" />
-              </Pressable>
-            </Link>
           </View>
         </View>
-        <View className="flex-row mt-2">
+
+        <View className="absolute left-4">
           <Pressable
-            onPress={() => setHeatmapEnabled((previous) => !previous)}
-            className="rounded-full bg-slate-800/40 px-3 py-1 mr-2"
+            onPress={() => setHeatmapEnabled((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full mb-2 ${
+              heatmapEnabled
+                ? "bg-cyan-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
           >
-            <Text className="text-xs text-white font-semibold">
-              {heatmapEnabled ? "Heatmap: on" : "Heatmap: off"}
-            </Text>
+            <Ionicons
+              name="flame"
+              size={20}
+              color={heatmapEnabled ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
           </Pressable>
           <Pressable
-            onPress={() => void syncHeatmap()}
-            className="rounded-full bg-slate-800/40 px-3 py-1"
+            onPress={() => setShowCrimePins((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full mb-2 ${
+              showCrimePins
+                ? "bg-blue-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
           >
-            <Text className="text-xs text-white font-semibold">
-              {syncingHeatmap ? "Heatmap syncing..." : "Refresh heatmap"}
-            </Text>
+            <Ionicons
+              name="shield-outline"
+              size={18}
+              color={showCrimePins ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
           </Pressable>
+          <Pressable
+            onPress={() => setShowReportPins((prev) => !prev)}
+            className={`h-10 w-10 items-center justify-center rounded-full ${
+              showReportPins
+                ? "bg-rose-500"
+                : highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}
+          >
+            <Ionicons
+              name="flag-outline"
+              size={18}
+              color={showReportPins ? "#ffffff" : highContrast ? "#64748b" : "#94a3b8"}
+            />
+          </Pressable>
+        </View>
+
+        <View className="absolute right-4 flex-row">
+          <Link href="/profile" asChild>
+            <Pressable className={`mr-2 h-10 w-10 items-center justify-center rounded-full ${
+              highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}>
+              <Ionicons name="person-outline" size={19} color={highContrast ? "#0f172a" : "#ffffff"} />
+            </Pressable>
+          </Link>
+          <Link href="/settings" asChild>
+            <Pressable className={`h-10 w-10 items-center justify-center rounded-full ${
+              highContrast ? "bg-white/90" : "bg-slate-900/70"
+            }`}>
+              <Ionicons name="settings-outline" size={19} color={highContrast ? "#0f172a" : "#ffffff"} />
+            </Pressable>
+          </Link>
         </View>
       </View>
 
-      <View
-        className={`absolute left-4 right-4 rounded-3xl border px-4 py-4 ${theme.bottomPanel}`}
-        style={{ bottom: Math.max(insets.bottom, 14) + 84 }}
+      {toast ? (
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="absolute left-4 right-4 rounded-xl bg-red-500/90 px-4 py-3"
+          style={{ top: insets.top + 52 }}
+        >
+          <Text className="text-white text-xs font-semibold">{toast}</Text>
+        </Animated.View>
+      ) : null}
+
+      <Animated.View
+        layout={LinearTransition.duration(250)}
+        className={`absolute left-0 right-0 bottom-0 rounded-t-3xl border-t px-5 pt-4 ${theme.bottomPanel}`}
+        style={{ paddingBottom: Math.max(insets.bottom, 16) }}
       >
         {permissionState === "denied" ? (
           <Text className="text-xs text-amber-300 mb-2">
@@ -689,43 +1096,252 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </>
+        ) : reportMode ? (
+          <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className={`font-bold ${theme.primaryText}`}>Report an issue</Text>
+              <Pressable onPress={closeReportMode}>
+                <Ionicons name="close" size={22} color={highContrast ? "#0f172a" : "#94a3b8"} />
+              </Pressable>
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>What happened?</Text>
+            <View className="flex-row flex-wrap mb-3">
+              {ISSUE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => setReportIssue(option)}
+                  className={`rounded-full border px-3 py-1.5 mr-2 mb-2 ${
+                    reportIssue === option
+                      ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                      : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                  }`}
+                >
+                  <Text className={`text-xs font-semibold ${
+                    reportIssue === option ? "text-white" : theme.primaryText
+                  }`}>
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>Description</Text>
+            <View
+              className={`rounded-xl border px-3 py-2 mb-3 ${
+                highContrast ? "bg-white border-slate-300" : "bg-slate-800/60 border-slate-700/40"
+              }`}
+            >
+              <TextInput
+                value={reportDescription}
+                onChangeText={setReportDescription}
+                placeholder="Please describe what happened"
+                placeholderTextColor={highContrast ? "#94a3b8" : "#64748b"}
+                className={theme.primaryText}
+                multiline
+                style={{ minHeight: 60, textAlignVertical: "top" }}
+              />
+            </View>
+
+            <Text className={`text-xs mb-2 ${theme.secondaryText}`}>Location</Text>
+            <View className="flex-row mb-3">
+              <Pressable
+                onPress={() => {
+                  setReportLocation(null);
+                  setReportPickingLocation(false);
+                }}
+                className={`flex-1 mr-2 rounded-xl py-2 items-center border ${
+                  !reportLocation && !reportPickingLocation
+                    ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                    : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                }`}
+              >
+                <Text className={`text-xs font-semibold ${
+                  !reportLocation && !reportPickingLocation ? "text-white" : theme.primaryText
+                }`}>
+                  My location
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setReportPickingLocation(true)}
+                className={`flex-1 ml-2 rounded-xl py-2 items-center border ${
+                  reportPickingLocation || reportLocation
+                    ? highContrast ? "bg-slate-900 border-slate-900" : "bg-cyan-500 border-cyan-500"
+                    : highContrast ? "bg-slate-100 border-slate-300" : "bg-slate-800/40 border-slate-700/40"
+                }`}
+              >
+                <Text className={`text-xs font-semibold ${
+                  reportPickingLocation || reportLocation ? "text-white" : theme.primaryText
+                }`}>
+                  {reportPickingLocation ? "Tap the map..." : reportLocation ? "Map pin set" : "Pick on map"}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={submitReport}
+              disabled={reportSubmitting}
+              className={`rounded-xl py-3 items-center ${reportSubmitting ? "bg-slate-400" : highContrast ? "bg-slate-900" : "bg-cyan-500"}`}
+            >
+              <Text className="text-white font-bold">
+                {reportSubmitting ? "Submitting..." : "Submit report"}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        ) : routePreview && previewRoute ? (
+          <>
+            <Text className={`font-bold ${theme.primaryText}`}>
+              {routePreview.destination.label ?? "Destination"}
+            </Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2 -mx-1">
+              {routePreview.plan.ranked_routes.map((route) => {
+                const isSelected = route.candidate_id === (selectedPreviewId ?? routePreview.plan.selected_route_id);
+                return (
+                  <Pressable
+                    key={route.candidate_id}
+                    onPress={() => setSelectedPreviewId(route.candidate_id)}
+                    className={`rounded-xl border px-3 py-2 mr-2 ${
+                      isSelected
+                        ? highContrast ? "border-slate-900 bg-slate-100" : "border-cyan-400/60 bg-cyan-500/10"
+                        : highContrast ? "border-slate-200 bg-white" : "border-slate-700/40 bg-slate-800/40"
+                    }`}
+                    style={{ minWidth: 140 }}
+                  >
+                    <Text className={`text-xs font-bold ${theme.primaryText}`}>
+                      {route.label ?? `Route ${route.rank}`}
+                    </Text>
+                    <Text className={`text-[10px] mt-0.5 ${theme.secondaryText}`}>
+                      {formatDistanceMetres(route.distance_metres)} | {Math.max(1, Math.round(route.duration_seconds / 60))} min
+                    </Text>
+                    <Text className={`text-[10px] mt-0.5 ${theme.secondaryText}`}>
+                      Safety: {Math.round(route.score)}%
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {previewRoute.explanation?.summary ? (
+              <Text className={`text-xs mt-2 ${theme.secondaryText}`} numberOfLines={2}>
+                {previewRoute.explanation.summary}
+              </Text>
+            ) : null}
+            <View className="flex-row mt-3">
+              <Pressable
+                onPress={handleStartWalk}
+                disabled={startingWalk}
+                className="mr-2 flex-1 rounded-xl bg-cyan-500 py-3 items-center"
+              >
+                <Text className="text-slate-950 font-bold">
+                  {startingWalk ? "Starting..." : "Start walk"}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={cancelRoutePreview}
+                className="rounded-xl bg-slate-500 px-4 py-3 items-center"
+              >
+                <Text className="text-white font-bold">Cancel</Text>
+              </Pressable>
+            </View>
+          </>
         ) : (
           <>
-            <Text className={`font-bold ${theme.primaryText}`}>No active walk</Text>
-            <Text className={`text-xs mt-1 ${theme.secondaryText}`}>
-              Plan a route from the Route tab and tap Start walk.
-            </Text>
-            <Pressable
-              onPress={() => router.push("/(tabs)/route")}
-              className="mt-3 rounded-xl bg-cyan-500 px-4 py-2 self-start"
+            <Text className={`font-bold mb-2 ${theme.primaryText}`}>Where are you heading?</Text>
+            <View
+              className={`rounded-xl border px-3 py-2 ${
+                highContrast
+                  ? "bg-white border-slate-300"
+                  : "bg-slate-800/60 border-slate-700/40"
+              }`}
             >
-              <Text className="font-bold text-slate-950">Plan route</Text>
-            </Pressable>
+              <TextInput
+                value={searchText}
+                onChangeText={handleSearchChange}
+                placeholder="Search for a destination"
+                placeholderTextColor={highContrast ? "#94a3b8" : "#64748b"}
+                className={theme.primaryText}
+                returnKeyType="search"
+              />
+            </View>
+            {planningRoute ? (
+              <Text className={`text-xs mt-2 ${theme.secondaryText}`}>Finding safest route...</Text>
+            ) : null}
+            {planError ? (
+              <Text className="text-xs mt-2 text-red-400">{planError}</Text>
+            ) : null}
+            {suggestions.length > 0 ? (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(150)}
+                className="mt-2"
+              >
+                {suggestions.map((s, i) => (
+                  <Pressable
+                    key={`${s.latitude}-${s.longitude}-${i}`}
+                    onPress={() => handleSuggestionPress(s)}
+                    className={`rounded-lg px-3 py-2 mb-1 ${
+                      highContrast ? "bg-slate-100" : "bg-slate-800/40"
+                    }`}
+                  >
+                    <Text className={`text-sm ${theme.primaryText}`} numberOfLines={1}>
+                      {s.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </Animated.View>
+            ) : null}
           </>
         )}
-        <Text className={`text-[10px] mt-3 ${theme.secondaryText}`}>
-          {syncingReports
-            ? "Syncing nearby reports..."
-            : convexEnabled
-              ? hasConvexToken
-                ? "Realtime sync active (authenticated)"
-                : "Realtime sync active (anonymous)"
-              : "API sync active (Convex unavailable)"}
-        </Text>
-        {heatmapError ? (
-          <Text className="text-[10px] mt-1 text-red-300">{heatmapError}</Text>
-        ) : (
-          <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>
-            {heatmapEnabled
-              ? syncingHeatmap
-                ? "Heatmap syncing..."
-                : heatmapData?.items?.length
-                  ? `${heatmapData.items.length} heatmap cells loaded`
-                  : "Heatmap active (no cells in current radius)"
-              : "Heatmap hidden"}
-          </Text>
-        )}
-      </View>
+        {!session && !routePreview && !reportMode ? (
+          <View className="flex-row justify-between mt-3">
+            <Pressable
+              onPress={() => router.push("/(tabs)/services")}
+              className="items-center flex-1"
+            >
+              <View className={`h-11 w-11 rounded-full items-center justify-center ${
+                highContrast ? "bg-slate-100" : "bg-slate-800/60"
+              }`}>
+                <Ionicons name="medkit" size={20} color={highContrast ? "#0f172a" : "#22d3ee"} />
+              </View>
+              <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>Services</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push("/(tabs)/route")}
+              className="items-center flex-1"
+            >
+              <View className={`h-11 w-11 rounded-full items-center justify-center ${
+                highContrast ? "bg-slate-100" : "bg-slate-800/60"
+              }`}>
+                <Ionicons name="navigate" size={20} color={highContrast ? "#0f172a" : "#22d3ee"} />
+              </View>
+              <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>Plan route</Text>
+            </Pressable>
+            <Pressable
+              onPress={openReportMode}
+              className="items-center flex-1"
+            >
+              <View className={`h-11 w-11 rounded-full items-center justify-center ${
+                highContrast ? "bg-slate-100" : "bg-slate-800/60"
+              }`}>
+                <Ionicons name="warning" size={20} color={highContrast ? "#0f172a" : "#f59e0b"} />
+              </View>
+              <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>Report</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push("/(tabs)/report_list")}
+              className="items-center flex-1"
+            >
+              <View className={`h-11 w-11 rounded-full items-center justify-center ${
+                highContrast ? "bg-slate-100" : "bg-slate-800/60"
+              }`}>
+                <Ionicons name="shield-checkmark" size={20} color={highContrast ? "#0f172a" : "#34d399"} />
+              </View>
+              <Text className={`text-[10px] mt-1 ${theme.secondaryText}`}>Reports</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </Animated.View>
     </View>
   );
 }

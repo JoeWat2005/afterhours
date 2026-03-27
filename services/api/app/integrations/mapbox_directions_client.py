@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import math
 import os
 from typing import Any
 
@@ -145,6 +147,45 @@ def _mapbox_route_to_candidate(route: dict[str, Any], *, index: int) -> RouteCan
     )
 
 
+def _generate_offset_waypoints(
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+    offset_metres: float | None = None,
+) -> list[tuple[float, float]]:
+    # offset waypoints perpendicular to the midpoint of the direct path
+
+    mid_lat = (origin_lat + dest_lat) / 2
+    mid_lng = (origin_lng + dest_lng) / 2
+
+    dx = dest_lng - origin_lng
+    dy = dest_lat - origin_lat
+    length = math.sqrt(dx * dx + dy * dy)
+    if length == 0:
+        return []
+
+    # scale offset with route distance, at least 300m
+    if offset_metres is None:
+        route_metres = length * 111_320.0
+        offset_metres = max(300.0, route_metres * 0.25)
+
+    # perpendicular unit vector
+    perp_x = -dy / length
+    perp_y = dx / length
+
+    # rough degrees per metre at this latitude
+    lat_per_metre = 1.0 / 111_320.0
+    lng_per_metre = 1.0 / (111_320.0 * math.cos(math.radians(mid_lat)))
+
+    offsets = []
+    for sign in [1.0, -1.0]:
+        wp_lat = mid_lat + sign * perp_y * offset_metres * lat_per_metre
+        wp_lng = mid_lng + sign * perp_x * offset_metres * lng_per_metre
+        offsets.append((wp_lat, wp_lng))
+    return offsets
+
+
 async def fetch_mapbox_route_candidates(
     *,
     origin_latitude: float,
@@ -157,33 +198,57 @@ async def fetch_mapbox_route_candidates(
     if not access_token:
         raise RuntimeError("EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not configured")
 
-    coordinates = (
-        f"{origin_longitude},{origin_latitude};"
-        f"{destination_longitude},{destination_latitude}"
-    )
-
-    url = MAPBOX_DIRECTIONS_URL.format(coordinates=coordinates)
-
-    params = {
+    base_params = {
         "access_token": access_token,
-        "alternatives": "true" if alternatives > 1 else "false",
         "geometries": "geojson",
         "overview": "full",
         "steps": "true",
     }
 
-    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        payload = response.json()
+    # build coordinate strings: direct + two offset waypoint routes
+    coord_sets = [
+        f"{origin_longitude},{origin_latitude};{destination_longitude},{destination_latitude}"
+    ]
 
-    raw_routes = payload.get("routes", [])
-    if not raw_routes:
+    if alternatives > 1:
+        waypoints = _generate_offset_waypoints(
+            origin_latitude, origin_longitude,
+            destination_latitude, destination_longitude,
+        )
+        for wp_lat, wp_lng in waypoints:
+            coord_sets.append(
+                f"{origin_longitude},{origin_latitude};"
+                f"{wp_lng},{wp_lat};"
+                f"{destination_longitude},{destination_latitude}"
+            )
+
+    async def fetch_one(client: httpx.AsyncClient, coords: str) -> list[dict[str, Any]]:
+        try:
+            url = MAPBOX_DIRECTIONS_URL.format(coordinates=coords)
+            params = {**base_params, "alternatives": "true" if alternatives > 1 else "false"}
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json().get("routes", [])
+        except (httpx.HTTPError, ValueError):
+            return []
+
+    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
+        results = await asyncio.gather(*(fetch_one(client, c) for c in coord_sets))
+
+    seen_geometries: set[str] = set()
+    all_candidates: list[RouteCandidateInput] = []
+
+    for raw_routes in results:
+        for raw_route in raw_routes:
+            geo_key = str(raw_route.get("geometry", {}).get("coordinates", [])[:3])
+            if geo_key in seen_geometries:
+                continue
+            seen_geometries.add(geo_key)
+            all_candidates.append(
+                _mapbox_route_to_candidate(raw_route, index=len(all_candidates) + 1)
+            )
+
+    if not all_candidates:
         raise ValueError("Mapbox returned no routes")
 
-    limited_routes = raw_routes[: max(1, alternatives)]
-
-    return [
-        _mapbox_route_to_candidate(route, index=index)
-        for index, route in enumerate(limited_routes, start=1)
-    ]
+    return all_candidates[:max(1, alternatives)]

@@ -17,6 +17,15 @@ class HeatmapCellResponse(BaseModel):
     bounds: HeatmapCellBounds
 
 
+class CrimePinResponse(BaseModel):
+    crime_id: str
+    category: str
+    month: str
+    latitude: float
+    longitude: float
+    location_label: str | None = None
+
+
 class HeatmapResponse(BaseModel):
     latitude: float
     longitude: float
@@ -25,3 +34,4 @@ class HeatmapResponse(BaseModel):
     category: str
     date: str | None = Field(default=None)
     items: list[HeatmapCellResponse]
+    crime_pins: list[CrimePinResponse] = Field(default_factory=list)

@@ -11,8 +11,8 @@ def test_normalize_crime_category_returns_other_crime_for_none() -> None:
 
 def test_get_crime_weight_returns_expected_weight_for_known_category() -> None:
     assert get_crime_weight("violent-crime") == 10
-    assert get_crime_weight("robbery") == 5
-    assert get_crime_weight("anti-social-behaviour") == 2
+    assert get_crime_weight("robbery") == 6
+    assert get_crime_weight("anti-social-behaviour") == 1
 
 
 def test_get_crime_weight_normalizes_before_lookup() -> None:

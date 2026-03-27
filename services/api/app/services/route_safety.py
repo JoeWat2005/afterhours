@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from math import cos, floor, radians
@@ -62,14 +63,14 @@ class RouteCrimeAggregationInput(TypedDict):
     cell_size_metres: float
 
 
-def normalize_police_crime_category(category: str | None) -> str:
+def normalize_crime_category(category: str | None) -> str:
     if not category:
         return "other-crime"
     return category.strip().lower().replace(" ", "-")
 
 
 def get_police_crime_severity(category: str | None) -> ReportSeverity:
-    normalized_category = normalize_police_crime_category(category)
+    normalized_category = normalize_crime_category(category)
     return POLICE_CRIME_CATEGORY_SEVERITY.get(
         normalized_category,
         DEFAULT_POLICE_CRIME_SEVERITY,
