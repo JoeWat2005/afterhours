@@ -710,7 +710,12 @@ export default function HomeScreen() {
       zoomLevel: 14,
       animationDuration: 700,
     });
-    setMapFocusTarget(null); //should i change the timing?
+    //.sleep()
+    const sleep = setTimeout(() => {
+      setMapFocusTarget(null);
+    }, 750); //gives time to reload
+
+    return () => clearTimeout(sleep);
   }, [mapFocusTarget, setMapFocusTarget]);
 
   useEffect(() => {
@@ -1033,6 +1038,28 @@ export default function HomeScreen() {
           </Link>
         </View>
       </View>
+
+      {!session && !reportMode ? (
+        <Link href="/settings" asChild>
+          <Pressable
+            className={`absolute left-4 flex-row items-center rounded-full border px-4 py-2.5 ${
+              highContrast
+                ? "bg-white/95 border-black/15"
+                : "bg-slate-900/80 border-cyan-500/20"
+            }`}
+            style={{ bottom: insets.bottom + 160 }}
+          >
+            <Ionicons
+              name="accessibility"
+              size={16}
+              color={highContrast ? "#0f172a" : "#94a3b8"}
+            />
+            <Text className={`text-xs font-semibold ml-1.5 ${theme.primaryText}`}>
+              Accessibility
+            </Text>
+          </Pressable>
+        </Link>
+      ) : null}
 
       {toast ? (
         <Animated.View

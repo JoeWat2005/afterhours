@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
 import type { Coordinates, RankedRoute } from "../../lib/api";
 
@@ -73,24 +73,50 @@ export function RouteSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<ActiveRouteSession | null>(null);
   const [mapFocusTarget, setMapFocusTarget] = useState<MapFocusTarget | null>(null);
 
-  const value = useMemo<RouteSessionContextValue>(
-    () => ({
-      session,
-      mapFocusTarget,
-      startSession: ({ journeyId, origin, destination, selectedRouteId, rankedRoutes }) => {
-        const activeRoute = findSelectedRoute(selectedRouteId, rankedRoutes);
-        if (!activeRoute) {
-          return;
-        }
+  // all actions use functional setSession so they never depend on the
+  // current session value,
+  const startSession = useCallback(
+    ({ journeyId, origin, destination, selectedRouteId, rankedRoutes }: {
+      journeyId: string | null;
+      origin: Coordinates;
+      destination: Coordinates;
+      selectedRouteId: string;
+      rankedRoutes: RankedRoute[];
+    }) => {
+      const activeRoute = findSelectedRoute(selectedRouteId, rankedRoutes);
+      if (!activeRoute) return;
+      setSession({
+        journeyId,
+        origin,
+        destination,
+        selectedRouteId,
+        rankedRoutes,
+        activeRoute,
+        status: "active",
+        progressRatio: 0,
+        remainingDistanceMetres: activeRoute.distance_metres,
+        remainingDurationSeconds: activeRoute.duration_seconds,
+        distanceFromRouteMetres: 0,
+        currentStepIndex: 0,
+        offRouteSamples: 0,
+        rerouting: false,
+        lastLocation: null,
+      });
+    },
+    [],
+  );
 
-        setSession({
-          journeyId,
-          origin,
-          destination,
+  const replaceActiveRoute = useCallback(
+    ({ selectedRouteId, rankedRoutes }: { selectedRouteId: string; rankedRoutes: RankedRoute[] }) => {
+      setSession((prev) => {
+        if (!prev) return prev;
+        const activeRoute = findSelectedRoute(selectedRouteId, rankedRoutes);
+        if (!activeRoute) return prev;
+        return {
+          ...prev,
           selectedRouteId,
           rankedRoutes,
           activeRoute,
-          status: "active",
           progressRatio: 0,
           remainingDistanceMetres: activeRoute.distance_metres,
           remainingDurationSeconds: activeRoute.duration_seconds,
@@ -98,90 +124,59 @@ export function RouteSessionProvider({ children }: PropsWithChildren) {
           currentStepIndex: 0,
           offRouteSamples: 0,
           rerouting: false,
-          lastLocation: null,
-        });
-      },
-      replaceActiveRoute: ({ selectedRouteId, rankedRoutes }) => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          const activeRoute = findSelectedRoute(selectedRouteId, rankedRoutes);
-          if (!activeRoute) return previous;
-          return {
-            ...previous,
-            selectedRouteId,
-            rankedRoutes,
-            activeRoute,
-            progressRatio: 0,
-            remainingDistanceMetres: activeRoute.distance_metres,
-            remainingDurationSeconds: activeRoute.duration_seconds,
-            distanceFromRouteMetres: 0,
-            currentStepIndex: 0,
-            offRouteSamples: 0,
-            rerouting: false,
-          };
-        });
-      },
-      setWalkStatus: (status) => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            status,
-          };
-        });
-      },
-      clearSession: () => {
-        setSession(null);
-      },
-      updateProgress: ({
-        progressRatio,
-        remainingDistanceMetres,
-        remainingDurationSeconds,
-        distanceFromRouteMetres,
-        currentStepIndex,
-        lastLocation,
-      }) => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            progressRatio,
-            remainingDistanceMetres,
-            remainingDurationSeconds,
-            distanceFromRouteMetres,
-            currentStepIndex,
-            lastLocation,
-          };
-        });
-      },
-      incrementOffRouteSamples: () => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            offRouteSamples: previous.offRouteSamples + 1,
-          };
-        });
-      },
-      resetOffRouteSamples: () => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          if (previous.offRouteSamples === 0) return previous;
-          return {
-            ...previous,
-            offRouteSamples: 0,
-          };
-        });
-      },
-      setRerouting: (value) => {
-        setSession((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            rerouting: value,
-          };
-        });
-      },
+        };
+      });
+    },
+    [],
+  );
+
+  const setWalkStatus = useCallback((status: WalkStatus) => {
+    setSession((prev) => (prev ? { ...prev, status } : prev));
+  }, []);
+
+  const clearSession = useCallback(() => setSession(null), []);
+
+  const updateProgress = useCallback(
+    (params: {
+      progressRatio: number;
+      remainingDistanceMetres: number;
+      remainingDurationSeconds: number;
+      distanceFromRouteMetres: number;
+      currentStepIndex: number;
+      lastLocation: Coordinates;
+    }) => {
+      setSession((prev) => (prev ? { ...prev, ...params } : prev));
+    },
+    [],
+  );
+
+  const incrementOffRouteSamples = useCallback(() => {
+    setSession((prev) => (prev ? { ...prev, offRouteSamples: prev.offRouteSamples + 1 } : prev));
+  }, []);
+
+  const resetOffRouteSamples = useCallback(() => {
+    setSession((prev) => {
+      if (!prev || prev.offRouteSamples === 0) return prev;
+      return { ...prev, offRouteSamples: 0 };
+    });
+  }, []);
+
+  const setRerouting = useCallback((rerouting: boolean) => {
+    setSession((prev) => (prev ? { ...prev, rerouting } : prev));
+  }, []);
+
+  const value = useMemo<RouteSessionContextValue>(
+    () => ({
+      session,
+      mapFocusTarget,
+      startSession,
+      replaceActiveRoute,
+      setWalkStatus,
+      clearSession,
+      updateProgress,
+      incrementOffRouteSamples,
+      resetOffRouteSamples,
+      setRerouting,
       setMapFocusTarget,
     }),
     [mapFocusTarget, session],

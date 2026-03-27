@@ -149,6 +149,38 @@ function getCurrentStepIndex(
   return navigationSteps.length - 1;
 }
 
+// for transit routes, sum remaining step durations instead of
+// linearly interpol (bus segments are fast,
+// walking is slow, linear gives wrong stats)
+function getRemainingDurationFromSteps(
+  currentStepIndex: number,
+  distanceTravelledMetres: number,
+  navigationSteps: RouteNavigationStep[],
+  fallbackDuration: number,
+) {
+  if (!navigationSteps.length) return fallbackDuration;
+
+  // distance consumed before the current step
+  let distanceBefore = 0;
+  for (let i = 0; i < currentStepIndex; i += 1) {
+    distanceBefore += navigationSteps[i].distance_metres;
+  }
+
+  const currentStep = navigationSteps[currentStepIndex];
+  const distanceIntoStep = Math.max(0, distanceTravelledMetres - distanceBefore);
+  const stepProgress =
+    currentStep.distance_metres > 0
+      ? clamp(distanceIntoStep / currentStep.distance_metres, 0, 1)
+      : 0;
+  const remainingInCurrentStep = currentStep.duration_seconds * (1 - stepProgress);
+
+  let remaining = remainingInCurrentStep;
+  for (let i = currentStepIndex + 1; i < navigationSteps.length; i += 1) {
+    remaining += navigationSteps[i].duration_seconds;
+  }
+  return Math.max(0, Math.round(remaining));
+}
+
 export function computeRouteProgress(
   location: RouteCoordinate,
   routeCoordinates: RouteCoordinate[],
@@ -191,10 +223,11 @@ export function computeRouteProgress(
     totalLengthMetres > 0
       ? clamp(distanceTravelledMetres / totalLengthMetres, 0, 1)
       : 0;
-  const remainingDurationSeconds = Math.max(
-    0,
-    Math.round(routeDurationSeconds * (1 - progressRatio)),
-  );
+  const currentStepIndex = getCurrentStepIndex(distanceTravelledMetres, navigationSteps);
+
+  const remainingDurationSeconds = navigationSteps.length > 0
+    ? getRemainingDurationFromSteps(currentStepIndex, distanceTravelledMetres, navigationSteps, routeDurationSeconds)
+    : Math.max(0, Math.round(routeDurationSeconds * (1 - progressRatio)));
 
   return {
     progressRatio,
@@ -202,6 +235,6 @@ export function computeRouteProgress(
     remainingDistanceMetres,
     remainingDurationSeconds,
     distanceFromRouteMetres: closestDistance,
-    currentStepIndex: getCurrentStepIndex(distanceTravelledMetres, navigationSteps),
+    currentStepIndex,
   };
 }
