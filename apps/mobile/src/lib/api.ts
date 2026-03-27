@@ -55,9 +55,15 @@ async function getAuthHeaders(
   if (!requireAuth) {
     return {};
   }
-  const token = await getToken();
+  let token: string | null = null;
+  try {
+    token = await getToken();
+  } catch {
+    // clerk throws if there is no session, just skip the header
+    return {};
+  }
   if (!token) {
-    throw new Error("Missing Clerk auth token");
+    return {};
   }
   return { Authorization: `Bearer ${token}` };
 }

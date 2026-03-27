@@ -228,6 +228,9 @@ async def get_auth_context(
     settings: Settings = Depends(get_settings),
 ) -> AuthContext:
     if credentials is None or credentials.scheme.lower() != "bearer":
+        # let unauthenticated requests through in dev so the app works without clerk
+        if settings.environment == "development":
+            return AuthContext(subject="demo-user", claims={})
         raise _unauthorized("Missing bearer token")
 
     try:

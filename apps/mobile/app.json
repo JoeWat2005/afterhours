@@ -56,7 +56,12 @@
     ],
     "extra": {
       "projectName": "AlgorithmAvengers",
-      "architecture": "mobile-convex-clerk-mapbox"
-    }
+      "architecture": "mobile-convex-clerk-mapbox",
+      "router": {},
+      "eas": {
+        "projectId": "3d5ffc79-1d76-4833-8aeb-04645879b933"
+      }
+    },
+    "owner": "btc517"
   }
 }

@@ -5,11 +5,15 @@ import { tokenCache } from "@clerk/expo/token-cache";
 import { Slot, useRouter } from "expo-router";
 import { View, Text, TextInput, Pressable, ActivityIndicator, LogBox } from "react-native";
 import { AppProviders } from "../src/providers/AppProviders";
+import { DemoModeProvider, useDemoMode } from "../src/lib/demoMode";
 
 if (__DEV__) {
   LogBox.ignoreLogs([
     "`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.",
     "`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.",
+    "Missing bearer token",
+    "Missing Clerk",
+    "Clerk:",
   ]);
 }
 
@@ -18,6 +22,7 @@ const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 function SignInScreen() {
   const { signIn } = useSignIn();
   const router = useRouter();
+  const { enableDemo } = useDemoMode();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -87,11 +92,22 @@ function SignInScreen() {
           <Text className="text-white font-semibold text-base">Sign in</Text>
         )}
       </Pressable>
+
+      <Pressable
+        onPress={enableDemo}
+        className="rounded-lg py-3.5 items-center mt-3 border border-slate-200"
+      >
+        <Text className="text-slate-600 font-semibold text-base">Try demo</Text>
+      </Pressable>
+      <Text className="text-slate-400 text-[10px] text-center mt-2">
+        Skip sign in and explore with limited features
+      </Text>
     </View>
   );
 }
 
 function RootNavigator() {
+  const { demoMode } = useDemoMode();
   const { isSignedIn, isLoaded } = useAuth();
 
   if (!isLoaded) {
@@ -102,7 +118,7 @@ function RootNavigator() {
     );
   }
 
-  if (!isSignedIn) {
+  if (!isSignedIn && !demoMode) {
     return <SignInScreen />;
   }
 
@@ -112,9 +128,11 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <AppProviders>
-        <RootNavigator />
-      </AppProviders>
+      <DemoModeProvider>
+        <AppProviders>
+          <RootNavigator />
+        </AppProviders>
+      </DemoModeProvider>
     </ClerkProvider>
   );
 }

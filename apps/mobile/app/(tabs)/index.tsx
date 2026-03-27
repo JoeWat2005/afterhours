@@ -51,6 +51,7 @@ import {
   type RouteWaitingAreaChoices,
 } from "../../src/providers/UIPreferences";
 import { env } from "../../src/lib/env";
+import { useDemoMode } from "../../src/lib/demoMode";
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "");
 
@@ -121,6 +122,8 @@ export default function HomeScreen() {
     setLowDataMode,
   } = useUiPreferences();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { demoMode } = useDemoMode();
+  const authed = isSignedIn || demoMode;
   const { hasConvexToken, checked: convexTokenChecked } = useConvexTokenAvailability();
   const convexEnabled = Boolean(env.convexUrl);
   const upsertReport = useMutation(api.reports.upsertReportFromApi);
@@ -764,7 +767,7 @@ export default function HomeScreen() {
   }
 
   async function syncNearbyReports() {
-    if (syncingReports || !isLoaded || !isSignedIn) return;
+    if (syncingReports || (!isLoaded && !demoMode) || !authed) return;
     setSyncingReports(true);
     try {
       const center =
@@ -812,7 +815,7 @@ export default function HomeScreen() {
   }
 
   async function syncHeatmap() {
-    if (!heatmapEnabled || syncingHeatmap || !isLoaded || !isSignedIn) return;
+    if (!heatmapEnabled || syncingHeatmap || (!isLoaded && !demoMode) || !authed) return;
     setHeatmapError(null);
     setSyncingHeatmap(true);
     try {
@@ -994,9 +997,10 @@ export default function HomeScreen() {
   }, [
     isFocused,
     currentLocation,
-    session?.lastLocation,
+    session?.lastLocation ?? null,
     convexEnabled,
     heatmapEnabled,
+    authed,
   ]);
 
   const currentStepInstruction =
@@ -1123,11 +1127,11 @@ export default function HomeScreen() {
               <Mapbox.CircleLayer
                 id="report-points"
                 style={{
-                  circleRadius: 5,
+                  circleRadius: 8,
                   circleColor: highContrast ? "#b91c1c" : "#f43f5e",
                   circleStrokeColor: "#ffffff",
-                  circleStrokeWidth: 1,
-                  circleOpacity: 0.85,
+                  circleStrokeWidth: 2,
+                  circleOpacity: 0.9,
                 }}
               />
             </Mapbox.ShapeSource>
