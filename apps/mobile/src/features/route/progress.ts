@@ -150,8 +150,8 @@ function getCurrentStepIndex(
 }
 
 // for transit routes, sum remaining step durations instead of
-// linearly interpol (bus segments are fast,
-// walking is slow, linear gives wrong stats)
+// linearly interpolating total duration (bus segments are fast,
+// walking is slow, so linear scaling gives wrong estimates)
 function getRemainingDurationFromSteps(
   currentStepIndex: number,
   distanceTravelledMetres: number,

@@ -74,7 +74,7 @@ export function RouteSessionProvider({ children }: PropsWithChildren) {
   const [mapFocusTarget, setMapFocusTarget] = useState<MapFocusTarget | null>(null);
 
   // all actions use functional setSession so they never depend on the
-  // current session value,
+  // current session value, keeping their references stable across renders
   const startSession = useCallback(
     ({ journeyId, origin, destination, selectedRouteId, rankedRoutes }: {
       journeyId: string | null;
