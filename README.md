@@ -79,74 +79,83 @@ There is an [example .env file](./.env.example) at the repo root with example en
 - AWS RDS PostgreSQL + PostGIS
 - AWS ElastiCache Redis
 
-## Quick Setup
+## Running the app
 
-### What you need
+You need **Docker Desktop** and **Node 22+** installed. That is basically it.
 
-- Node 22
-- npm 11
-- Python 3.13
-- Docker Desktop
-
-Terraform is only needed if you are doing backend AWS infra stuff.
-
-### Frontend setup
-
-```bash
-npm install
-cp .env.example .env
-cd apps/mobile && npx convex login   # once per machine
-npm run convex:dev                   # from repo root; or: cd apps/mobile && npx convex dev
-npm run mobile:start
-```
-
-Convex’s project root is `apps/mobile` (where `convex/` lives).
-
-If you are working on the map features, you will need a valid Mapbox token in `.env`.
-
-### Local backend setup
-
-Start local services:
-
-```bash
-docker compose -f infra/local/docker-compose.yml up -d
-```
-
-Set up the API:
+### 1. Start the backend
 
 ```bash
 cd services/api
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-python -m app.main
+cp .env.example .env
+docker compose up --build
 ```
 
-Set up the worker:
+This starts Postgres (with PostGIS), Redis and the API on `localhost:8000`. It runs migrations and seeds the database with sample reports automatically, so there is something to look at on first load.
+
+### 2. Start the mobile app
 
 ```bash
-cd services/worker
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-python -m worker.main
+npm install
+cd apps/mobile
+npx expo start
 ```
 
-## How We Use The Repo
+Press `i` for the iOS simulator or `a` for Android. The app points at `localhost:8000` by default.
+
+On the sign in screen you can tap **Try demo** to skip authentication and go straight to the map. This works without a Clerk account, the backend accepts unauthenticated requests in development mode.
+
+If you want to sign in properly, use a Clerk account registered under the project’s publishable key.
+
+### 3. iOS simulator location
+
+The iOS simulator defaults to San Francisco. To set it to Birmingham (where the heatmap and seed data are):
+
+```bash
+xcrun simctl location booted set 52.4862,-1.8904
+```
+
+### Running on Android
+
+There is no `android/` folder committed because EAS cloud builds regenerate it. If you want to build locally you would need Android Studio, then:
+
+```bash
+cd apps/mobile
+npx expo prebuild --platform android
+npx expo run:android
+```
+
+Alternatively we have an EAS build profile that produces an APK in the cloud without needing Android Studio:
+
+```bash
+cd apps/mobile
+npx eas build --profile preview --platform android
+```
+
+### Running the tests
+
+```bash
+cd services/api
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+pytest tests/unit/ -v          # fast, no external deps
+pytest tests/integration/ -v   # needs postgres running
+```
+
+### Known issues
+
+- In demo mode (unauthenticated), user report pins don’t appear on the map. The heatmap, route planning, services and report submission all work fine. We think it is a timing issue with how the sync fires before the demo flag propagates, but ran out of time to fix it.
+- The Android APK build via EAS is set up but hasn’t been fully tested end to end on a device yet.
+
+### Environment variables
+
+The `.env.example` in `services/api/` has everything documented. The root `.env` has the mobile app keys (Mapbox, Clerk, Google Maps). API keys are included for development use only.
+
+## How we used the repo
 
 - `main` = stable branch
 - `develop` = shared integration branch
-- feature work goes on feature branches and gets PR'd into `develop`
+- feature work went on feature branches and got PR’d into `develop`
 
 Read the full workflow in [docs/conventions.md](./docs/conventions.md).
-
-## Short Project Plan
-
-The rough build order is:
-
-1. get the core frontend/backend skeleton in place
-2. wire auth and basic account flow
-3. build the map-based route experience
-4. add crime / lighting / transport overlays and filters
-5. add user reporting
-6. tighten up caching, offline behaviour, and edge cases
