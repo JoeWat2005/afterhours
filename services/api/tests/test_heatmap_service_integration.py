@@ -216,3 +216,72 @@ async def test_heatmap_cache_key_rounds_nearby_coordinates(monkeypatch: pytest.M
     )
 
     assert calls["fetch"] == 2
+
+
+def test_prune_cache_removes_expired_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Directly inject entries into the cache dict and confirm _prune_cache evicts
+    # the ones whose expiry timestamp is in the past.
+    cache = heatmap_service._cache
+
+    stub_result = heatmap_service.HeatmapResult(
+        latitude=51.5,
+        longitude=-0.12,
+        radius_metres=1000,
+        cell_size_metres=250,
+        category="all-crime",
+        date="2026-02",
+        items=[],
+    )
+
+    now = 2000.0
+    cache["expired-a"] = (1000.0, stub_result)   # expired: expires_at < now
+    cache["expired-b"] = (1999.9, stub_result)   # expired: expires_at < now
+    cache["live-a"] = (2001.0, stub_result)      # still valid
+    cache["live-b"] = (9999.0, stub_result)      # still valid
+
+    heatmap_service._prune_cache(now)
+
+    assert "expired-a" not in cache
+    assert "expired-b" not in cache
+    assert "live-a" in cache
+    assert "live-b" in cache
+
+
+def test_prune_cache_evicts_oldest_when_over_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Fill the cache beyond _MAX_CACHE_ENTRIES (128) with non-expired entries
+    # and confirm _prune_cache removes the oldest ones down to the limit.
+    cache = heatmap_service._cache
+    max_entries = heatmap_service._MAX_CACHE_ENTRIES
+
+    stub_result = heatmap_service.HeatmapResult(
+        latitude=51.5,
+        longitude=-0.12,
+        radius_metres=1000,
+        cell_size_metres=250,
+        category="all-crime",
+        date="2026-02",
+        items=[],
+    )
+
+    now = 500.0
+    far_future = 99_999.0
+
+    # Insert max_entries + 10 entries, each with a distinct expiry so the
+    # oldest are identifiable. Expiry increases with index, so key-0 is oldest.
+    overflow_count = 10
+    total = max_entries + overflow_count
+    for i in range(total):
+        cache[f"key-{i}"] = (far_future + i, stub_result)
+
+    heatmap_service._prune_cache(now)
+
+    # Cache must be trimmed to exactly max_entries
+    assert len(cache) == max_entries
+
+    # The overflow_count oldest entries (lowest expiry timestamps) should be gone
+    for i in range(overflow_count):
+        assert f"key-{i}" not in cache
+
+    # The newest entries should still be present
+    for i in range(overflow_count, total):
+        assert f"key-{i}" in cache
