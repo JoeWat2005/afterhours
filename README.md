@@ -115,7 +115,7 @@ docker compose -f infra/local/docker-compose.yml up -d
 Set up the API:
 
 ```bash
-cd /Users/benjamincheesebrough/Desktop/AlgorithmAvengers/services/api
+cd services/api
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -125,7 +125,7 @@ python -m app.main
 Set up the worker:
 
 ```bash
-cd /Users/benjamincheesebrough/Desktop/AlgorithmAvengers/services/worker
+cd services/worker
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
