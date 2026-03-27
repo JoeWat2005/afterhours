@@ -79,10 +79,13 @@ def _time_multiplier(hour: int | None) -> float:
         return 1.0
     h = hour % 24
     for start, end, mult in risk_config.TIME_RISK_MULTIPLIERS:
-        if start <= h < end:
-            return mult
+        if start < end:
+            if start <= h < end:
+                return mult
+        else:
+            if h >= start or h < end:
+                return mult
     return 1.0
-
 
 def _lighting_modifier(score: float | None) -> float:
     # map a 0-1 lighting score to a risk modifier, missing data gets a slight penalty, can't just assume it's fine

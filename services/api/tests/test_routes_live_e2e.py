@@ -128,6 +128,10 @@ async def test_live_time_of_day_affects_safety_scores() -> None:
     at_least_one_differs = any(
         daytime_safety[cid] != night_safety[cid] for cid in common_ids
     )
+
+    print(f"\nDaytime Scores: {daytime_safety}")
+    print(f"Nighttime Scores: {night_safety}")
+
     assert at_least_one_differs, (
         "Safety scores were identical at midday and 2am, "
         "time of day multiplier does not seem to be working."

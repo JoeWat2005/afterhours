@@ -1,5 +1,9 @@
 from pathlib import Path
 import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
