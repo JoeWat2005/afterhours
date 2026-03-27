@@ -12,6 +12,8 @@ The app is meant to help people:
 
 The project also aligns with UN Sustainable Development Goal 11 by focusing on safer and more accessible urban travel at night.
 
+A demo walkthrough video is included at [`apps/mobile/demo.mov`](apps/mobile/demo.mov).
+
 ## Repo Structure
 
 ```text
