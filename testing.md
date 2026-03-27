@@ -1,7 +1,7 @@
 
 
 ## Testing Strategy and Scope
-This document outlines the testing approach for the After Hours project, ensuring both the Python backend and the React Native frontend function correctly in isolation and when integrated.
+This document outlines the testing approach for the backend architectures.
 
 **Tools Utilized:**
 * **Backend:** `pytest` for unit and integration testing
