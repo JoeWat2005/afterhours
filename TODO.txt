@@ -1,0 +1,19 @@
+1. accessibility features
+- has this not been done
+2. place stuff
+- does this mean place thinsgs 
+3. test updates
+4. frontend testing
+- has oks done the front end?
+5. ben score logic stuff
+- what about this is it not done, his logic was scored a bit by me,
+ but then new things written. IS this the particular bayseian method we talked about?
+6. heatmap overlay
+- i thought this was done. is this not on the frontend
+
+stuff i scrapped:
+places geotags etc
+idk too tired
+figure out tmeq
+
+backend done
