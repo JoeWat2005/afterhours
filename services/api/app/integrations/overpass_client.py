@@ -232,6 +232,165 @@ def _is_well_lit(tags: dict[str, Any]) -> bool:
     return lit in {"yes", "automatic", "limited"}
 
 
+def _transit_subtype_from_tags(tags: dict[str, Any]) -> str | None:
+    public_transport = str(tags.get("public_transport") or "").strip().lower()
+    railway = str(tags.get("railway") or "").strip().lower()
+    highway = str(tags.get("highway") or "").strip().lower()
+
+    if railway == "station" or public_transport == "station":
+        return "station"
+    if highway == "bus_stop" or public_transport in {"platform", "stop_position"}:
+        return "bus_stop"
+    return None
+
+
+async def fetch_route_transit_overlays(
+    *,
+    route_geometry_geojson: dict[str, Any] | None,
+    sample_spacing_metres: float = DEFAULT_ROUTE_SAMPLE_SPACING_METRES,
+    max_route_points: int = DEFAULT_MAX_ROUTE_FETCH_POINTS,
+    near_route_radius_metres: float = DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
+    limit: int = 100,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    warnings: list[str] = []
+
+    if not route_geometry_geojson:
+        return {
+            "items": [],
+            "warnings": ["missing_route_geometry"],
+        }
+
+    try:
+        route_points = iter_route_points(route_geometry_geojson)
+    except ValueError:
+        return {
+            "items": [],
+            "warnings": ["invalid_route_geometry"],
+        }
+
+    sampled_points = sample_route_points_by_distance(
+        route_points,
+        spacing_metres=sample_spacing_metres,
+        max_points=max_route_points,
+    )
+    if not sampled_points:
+        return {
+            "items": [],
+            "warnings": ["invalid_route_geometry"],
+        }
+
+    south, west, north, east = _build_bbox(sampled_points)
+    query = _build_overpass_query(
+        south=south,
+        west=west,
+        north=north,
+        east=east,
+    )
+
+    owns_client = client is None
+    if owns_client:
+        client = httpx.AsyncClient(timeout=OVERPASS_TIMEOUT)
+
+    try:
+        response = await _request_with_retries(
+            client,
+            "POST",
+            OVERPASS_API_URL,
+            content=query,
+            headers={"Content-Type": "text/plain"},
+        )
+        payload = response.json()
+    except (httpx.HTTPError, RuntimeError):
+        return {
+            "items": [],
+            "warnings": ["route_context_api_unavailable"],
+        }
+    except ValueError:
+        return {
+            "items": [],
+            "warnings": ["route_context_api_invalid_response"],
+        }
+    finally:
+        if owns_client:
+            await client.aclose()
+
+    elements = payload.get("elements")
+    if not isinstance(elements, list):
+        return {
+            "items": [],
+            "warnings": ["route_context_api_invalid_response"],
+        }
+
+    deduped_items: dict[str, dict[str, Any]] = {}
+    for el in elements:
+        if not isinstance(el, dict):
+            continue
+
+        tags = el.get("tags") or {}
+        subtype = _transit_subtype_from_tags(tags)
+        if subtype is None:
+            continue
+
+        center = _get_center_lat_lng(el)
+        if center is None:
+            continue
+
+        latitude, longitude = center
+        if not _is_near_route(
+            latitude,
+            longitude,
+            sampled_points,
+            radius_metres=near_route_radius_metres,
+        ):
+            continue
+
+        distance_from_route = min(
+            _approx_distance_metres((latitude, longitude), route_point)
+            for route_point in sampled_points
+        )
+
+        element_type = str(el.get("type") or "element").strip().lower()
+        element_id = str(el.get("id") or "").strip()
+        if element_id:
+            overlay_id = f"overpass-{element_type}-{element_id}"
+        else:
+            overlay_id = f"overpass-{subtype}-{round(latitude, 6)}-{round(longitude, 6)}"
+
+        item = {
+            "id": overlay_id,
+            "subtype": subtype,
+            "name": str(tags.get("name") or "").strip() or None,
+            "latitude": latitude,
+            "longitude": longitude,
+            "distance_from_route_metres": round(distance_from_route, 2),
+            "source": "overpass",
+            "metadata": {
+                "public_transport": str(tags.get("public_transport") or "").strip() or None,
+                "railway": str(tags.get("railway") or "").strip() or None,
+                "highway": str(tags.get("highway") or "").strip() or None,
+            },
+        }
+
+        existing = deduped_items.get(overlay_id)
+        if existing is None or item["distance_from_route_metres"] < existing["distance_from_route_metres"]:
+            deduped_items[overlay_id] = item
+
+    sorted_items = sorted(
+        deduped_items.values(),
+        key=lambda item: (
+            float(item["distance_from_route_metres"]),
+            str(item.get("name") or ""),
+            str(item["id"]),
+        ),
+    )
+
+    return {
+        "items": sorted_items[: max(1, limit)],
+        "warnings": sorted(set(warnings)),
+    }
+
+
 async def fetch_route_context_features(
     *,
     route_geometry_geojson: dict[str, Any] | None,
@@ -240,6 +399,8 @@ async def fetch_route_context_features(
     near_route_radius_metres: float = DEFAULT_CONTEXT_NEAR_ROUTE_RADIUS_METRES,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
+    from app.core.cache import cache_get, cache_set
+
     warnings: list[str] = []
 
     if not route_geometry_geojson:
@@ -275,6 +436,16 @@ async def fetch_route_context_features(
         }
 
     south, west, north, east = _build_bbox(sampled_points)
+
+    # round bbox for better cache hits
+    cache_key = {
+        "s": round(south, 3), "w": round(west, 3),
+        "n": round(north, 3), "e": round(east, 3),
+    }
+    cached = await cache_get("overpass", cache_key)
+    if cached is not None:
+        return cached
+
     query = _build_overpass_query(
         south=south,
         west=west,
@@ -448,7 +619,7 @@ async def fetch_route_context_features(
         waiting_areas_in_safe_areas_ratio = 0.0
         warnings.append("no_waiting_area_data_found")
 
-    return {
+    result = {
         "lighting_score": lighting_score,
         "accessibility": {
             "stairs_present": stairs_count > 0,
@@ -467,3 +638,7 @@ async def fetch_route_context_features(
         },
         "warnings": sorted(set(warnings)),
     }
+
+    # cache for 24h, osm data barely changes
+    await cache_set("overpass", cache_key, result, ttl_seconds=86400)
+    return result
