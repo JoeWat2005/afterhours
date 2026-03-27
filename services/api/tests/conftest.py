@@ -19,7 +19,6 @@ engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(bind=engine)
 
 @pytest.fixture(scope="function")
-
 def db_session():
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
