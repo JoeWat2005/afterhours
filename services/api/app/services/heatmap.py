@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import floor, sqrt
 from time import monotonic
 from typing import Any, TypedDict
 
 import httpx
+from geoalchemy2.shape import to_shape
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.route_enrichment_config import DEFAULT_CATEGORY, DEFAULT_TIMEOUT, POLICE_API_BASE_URL
 from app.integrations import police_client
+from app.integrations.police_client import CrimePoint
+from app.models.report import SafetyReport
 from app.services.route_safety import (
     get_crime_weight,
+    list_nearby_reports,
     to_latitude_longitude,
     to_xy_metre_coordinates,
 )
+from app.services.safety_reports import get_severity_weight
 
 
 _CACHE_TTL_SECONDS = 300
@@ -58,6 +64,7 @@ class HeatmapResult:
     category: str
     date: str | None
     items: list[HeatmapCell]
+    crime_pins: list[CrimePoint] = field(default_factory=list)
 
 
 _cache: dict[str, tuple[float, HeatmapResult]] = {}
@@ -177,11 +184,13 @@ async def _fetch_deduped_crimes(
 def _build_heatmap_cells(
     *,
     crimes: list[dict[str, Any]],
+    user_reports: list[SafetyReport],
     query: HeatmapQuery,
-) -> list[HeatmapCell]:
+) -> tuple[list[HeatmapCell], list[CrimePoint]]:
     origin = (query.latitude, query.longitude)
     cells: dict[tuple[int, int], dict[str, float | int]] = {}
     radius_squared = float(query.radius_metres * query.radius_metres)
+    crime_pins: list[CrimePoint] = []
 
     for raw_crime in crimes:
         normalized = police_client._normalize_crime(raw_crime)
@@ -198,6 +207,8 @@ def _build_heatmap_cells(
         if (x_metres * x_metres) + (y_metres * y_metres) > radius_squared:
             continue
 
+        crime_pins.append(normalized)
+
         row = floor(y_metres / query.cell_size_metres)
         col = floor(x_metres / query.cell_size_metres)
         key = (row, col)
@@ -205,6 +216,25 @@ def _build_heatmap_cells(
         data = cells.setdefault(key, {"risk_score": 0.0, "source_count": 0})
         data["risk_score"] = float(data["risk_score"]) + float(
             get_crime_weight(normalized.get("category"))
+        )
+        data["source_count"] = int(data["source_count"]) + 1
+
+    # fold user reports into the same grid
+    for report in user_reports:
+        point = to_shape(report.location)
+        lat, lng = point.y, point.x
+        x_metres, y_metres = to_xy_metre_coordinates((lat, lng), origin=origin)
+
+        if (x_metres * x_metres) + (y_metres * y_metres) > radius_squared:
+            continue
+
+        row = floor(y_metres / query.cell_size_metres)
+        col = floor(x_metres / query.cell_size_metres)
+        key = (row, col)
+
+        data = cells.setdefault(key, {"risk_score": 0.0, "source_count": 0})
+        data["risk_score"] = float(data["risk_score"]) + float(
+            get_severity_weight(report.severity)
         )
         data["source_count"] = int(data["source_count"]) + 1
 
@@ -254,10 +284,13 @@ def _build_heatmap_cells(
         ),
         reverse=True,
     )
-    return items
+    return items, crime_pins
 
 
-async def get_on_demand_heatmap(query: HeatmapQuery) -> HeatmapResult:
+async def get_on_demand_heatmap(
+    query: HeatmapQuery,
+    db: AsyncSession | None = None,
+) -> HeatmapResult:
     key = _cache_key(query)
     now = monotonic()
     cached = _cache.get(key)
@@ -274,7 +307,21 @@ async def get_on_demand_heatmap(query: HeatmapQuery) -> HeatmapResult:
         category=query.category,
         date=query.date,
     )
-    items = _build_heatmap_cells(crimes=crimes, query=query)
+
+    user_reports: list[SafetyReport] = []
+    if db is not None:
+        user_reports = await list_nearby_reports(
+            db,
+            latitude=query.latitude,
+            longitude=query.longitude,
+            radius_metres=float(query.radius_metres),
+        )
+
+    items, crime_pins = _build_heatmap_cells(
+        crimes=crimes,
+        user_reports=user_reports,
+        query=query,
+    )
 
     result = HeatmapResult(
         latitude=query.latitude,
@@ -284,6 +331,7 @@ async def get_on_demand_heatmap(query: HeatmapQuery) -> HeatmapResult:
         category=query.category,
         date=resolved_date,
         items=items,
+        crime_pins=crime_pins,
     )
 
     _cache[key] = (now + _CACHE_TTL_SECONDS, result)

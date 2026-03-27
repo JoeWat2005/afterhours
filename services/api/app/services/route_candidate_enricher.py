@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_session_factory
 from app.integrations.overpass_client import fetch_route_context_features
 from app.schemas.routes import (
     RouteCandidateInput,
@@ -28,17 +30,18 @@ async def enrich_route_candidate(
 ) -> RouteCandidateInput:
     enriched = deepcopy(candidate)
 
-    safety_metrics = await enrich_route_candidate_safety(
+    # run safety and context enrichment concurrently
+    safety_task = enrich_route_candidate_safety(
         route_geometry_geojson=enriched.geometry_geojson,
         route_id=enriched.candidate_id,
         date=crime_date,
         category=crime_category,
         db=db,
     )
-
-    context = await fetch_route_context_features(
+    context_task = fetch_route_context_features(
         route_geometry_geojson=enriched.geometry_geojson,
     )
+    safety_metrics, context = await asyncio.gather(safety_task, context_task)
 
     # Only fill missing safety values
     if enriched.features.safety.incident_density is None:
@@ -143,18 +146,24 @@ async def enrich_and_score_routes(
     crime_date: str | None = None,
     crime_category: str = "all-crime",
 ) -> RouteScoreResponse:
-    enriched_candidates: list[RouteCandidateInput] = []
-
-    for candidate in payload.route_candidates:
-        enriched_candidate = await enrich_route_candidate(
-            candidate,
-            db=db,
-            crime_date=crime_date,
-            crime_category=crime_category,
+    async def enrich_with_own_session(candidate: RouteCandidateInput) -> RouteCandidateInput:
+        # each route gets its own db session so they can run concurrently
+        if db is not None:
+            async with get_session_factory()() as own_db:
+                return await enrich_route_candidate(
+                    candidate, db=own_db,
+                    crime_date=crime_date, crime_category=crime_category,
+                )
+        return await enrich_route_candidate(
+            candidate, db=None,
+            crime_date=crime_date, crime_category=crime_category,
         )
-        enriched_candidates.append(enriched_candidate)
+
+    enriched_candidates = await asyncio.gather(*(
+        enrich_with_own_session(c) for c in payload.route_candidates
+    ))
 
     enriched_payload = deepcopy(payload)
-    enriched_payload.route_candidates = enriched_candidates
+    enriched_payload.route_candidates = list(enriched_candidates)
 
     return score_route_request(enriched_payload)

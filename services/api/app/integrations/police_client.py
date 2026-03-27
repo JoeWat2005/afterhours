@@ -116,6 +116,14 @@ async def fetch_street_crimes_for_location(
     category: str = DEFAULT_CATEGORY,
     client: httpx.AsyncClient | None = None,
 ) -> list[dict[str, Any]]:
+    from app.core.cache import cache_get, cache_set
+
+    # round coords so nearby points share cache
+    cache_key = {"lat": round(lat, 3), "lng": round(lng, 3), "date": date, "cat": category}
+    cached = await cache_get("police_crimes", cache_key)
+    if cached is not None:
+        return cached
+
     owns_client = client is None
     if owns_client:
         client = httpx.AsyncClient(
@@ -139,6 +147,8 @@ async def fetch_street_crimes_for_location(
         if not isinstance(payload, list):
             raise RuntimeError("Unexpected Police API response format")
 
+        # crime data is monthly so cache for 24h
+        await cache_set("police_crimes", cache_key, payload, ttl_seconds=86400)
         return payload
     finally:
         if owns_client:
