@@ -74,6 +74,7 @@ async def test_postgres_nearby_reports_filters_by_radius(
             summary="Near incident",
             details="Near details",
             location=func.ST_SetSRID(func.ST_MakePoint(-0.1200, 51.5000), 4326),
+            severity="high"
         )
         far_report = SafetyReport(
             user_id=user.id,
@@ -81,6 +82,7 @@ async def test_postgres_nearby_reports_filters_by_radius(
             summary="Far incident",
             details="Far details",
             location=func.ST_SetSRID(func.ST_MakePoint(-0.1600, 51.5400), 4326),
+            severity="high"
         )
         session.add_all([near_report, far_report])
         await session.commit()

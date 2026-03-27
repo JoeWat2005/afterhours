@@ -34,7 +34,7 @@ def _alembic_config(url: str) -> Config:
     service_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(service_root / "alembic.ini"))
     cfg.set_main_option("script_location", str(service_root / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", url)
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
     return cfg
 
 

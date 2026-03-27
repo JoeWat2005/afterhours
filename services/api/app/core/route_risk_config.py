@@ -73,7 +73,7 @@ USER_REPORT_RELIABILITY: Final[float] = 0.6
 SERIOUS_RATE_FACTOR: Final[float] = 0.12
 
 # exponential decay for harm rate to 0-1 safety score
-HARM_RATE_DECAY: Final[float] = 0.18
+HARM_RATE_DECAY: Final[float] = 0.0001
 
 # time of day risk multipliers (start hour inclusive, end hour exclusive, multiplier)
 TIME_RISK_MULTIPLIERS: Final[list[tuple[int, int, float]]] = [
