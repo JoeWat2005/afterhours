@@ -3,6 +3,11 @@ load_dotenv()
 
 from fastapi import FastAPI
 import uvicorn
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from app.api.router import api_router
 from app.core.config import get_settings
