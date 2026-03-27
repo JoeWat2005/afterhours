@@ -100,7 +100,7 @@ function SignInScreen() {
         <Text className="text-slate-600 font-semibold text-base">Try demo</Text>
       </Pressable>
       <Text className="text-slate-400 text-[10px] text-center mt-2">
-        Skip sign in and explore with limited features
+        Browse without signing in
       </Text>
     </View>
   );
