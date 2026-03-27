@@ -278,10 +278,13 @@ export type RouteBiasMode =
   | "balanced"
   | "most_efficiency";
 
+export type RouteTransportMode = "walking_only" | "walking_transit";
+
 export type RoutePlanRequest = {
   origin: Coordinates;
   destination: Coordinates;
   depart_at: string;
+  transport_mode?: RouteTransportMode;
   bias_mode?: RouteBiasMode;
   requirements?: RouteRequirements;
   preferences?: RoutePreferences;
@@ -292,6 +295,24 @@ export type RoutePlanResponse = {
   selected_route_id: string;
   ranked_routes: RankedRoute[];
   warnings: string[];
+};
+
+export type RouteOverlayItem = {
+  id: string;
+  overlay_type: "transit" | "report" | "service";
+  subtype: string;
+  name: string | null;
+  latitude: number;
+  longitude: number;
+  distance_from_route_metres: number | null;
+  source: string;
+  metadata: Record<string, unknown>;
+};
+
+export type RouteOverlaysResponse = {
+  items: RouteOverlayItem[];
+  warnings: string[];
+  generated_at: string;
 };
 
 export type JourneyResponse = {
