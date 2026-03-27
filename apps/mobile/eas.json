@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "node": "24.13.0",
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiYmVuY2hlZXNlYnJvdWdoIiwiYSI6ImNtbW0wbHl5NDA5c2MyeHIwaXlmb2kwbGEifQ.vaGO_ghc9jNcAwhaJQHBJQ",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZmFpci1zaGVlcGRvZy03OS5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000",
+        "EXPO_PUBLIC_CONVEX_URL": "https://shiny-parrot-956.eu-west-1.convex.cloud",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDNSj6AvEfGlh8uGbfpC_jFnMX5hhEckKo"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "android": {
+        "buildType": "apk"
+      },
+      "distribution": "internal"
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal"
+    }
+  }
+}
