@@ -1,8 +1,11 @@
+> [!WARNING]
+> **Deprecated: no longer maintained.** Built as a university team project and last updated in March 2026; kept for reference.
+
 # After Hours
 
 A mobile app for getting around cities safely at night: an Expo / React Native client backed by a FastAPI service that plans walking and public transport routes and scores them for safety, speed and accessibility.
 
-**Status:** prototype built as a university team project. It is not production-ready; see [Notes](#notes).
+**Status:** deprecated prototype, built as a university team project. It is not production-ready; see [Notes](#notes).
 
 After Hours is aimed at students, residents and tourists who need more information late at night than a standard route app provides. The project aligns with UN Sustainable Development Goal 11, which focuses on safer and more accessible cities.
 
